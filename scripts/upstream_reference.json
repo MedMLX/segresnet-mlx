@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "fixture_schema_version": 2,
+  "monai_version": "1.6.0",
+  "monai_revision": "eccefc57550b111ed781d82249dfe77872a0e918",
+  "monai_source": "https://github.com/Project-MONAI/MONAI",
+  "model_zoo_source": "https://github.com/Project-MONAI/model-zoo",
+  "model_zoo_revision": "db9eeeef7ba64ce2ced0230d9bd4c524f69b7f0c",
+  "files": [
+    "renalStructures_CECT_segmentation/configs/inference.json",
+    "renalStructures_CECT_segmentation/scripts/my_transforms.py",
+    "brats_mri_segmentation/configs/inference.json",
+    "wholeBody_ct_segmentation/configs/inference.json"
+  ]
+}
