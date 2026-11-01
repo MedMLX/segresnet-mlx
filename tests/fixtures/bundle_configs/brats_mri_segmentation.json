@@ -1,0 +1,87 @@
+{
+  "network_def": {
+    "_target_": "SegResNet",
+    "blocks_down": [
+      1,
+      2,
+      2,
+      4
+    ],
+    "blocks_up": [
+      1,
+      1,
+      1
+    ],
+    "init_filters": 16,
+    "in_channels": 4,
+    "out_channels": 3,
+    "dropout_prob": 0.2
+  },
+  "inferer": {
+    "_target_": "SlidingWindowInferer",
+    "roi_size": [
+      240,
+      240,
+      160
+    ],
+    "sw_batch_size": 1,
+    "overlap": 0.5
+  },
+  "preprocessing": {
+    "_target_": "Compose",
+    "transforms": [
+      {
+        "_target_": "LoadImaged",
+        "keys": "@image_key",
+        "image_only": false
+      },
+      {
+        "_target_": "NormalizeIntensityd",
+        "keys": "@image_key",
+        "nonzero": true,
+        "channel_wise": true
+      }
+    ]
+  },
+  "postprocessing": {
+    "_target_": "Compose",
+    "transforms": [
+      {
+        "_target_": "Activationsd",
+        "keys": "pred",
+        "sigmoid": true
+      },
+      {
+        "_target_": "Invertd",
+        "keys": "pred",
+        "transform": "@preprocessing",
+        "orig_keys": "@image_key",
+        "meta_keys": "pred_meta_dict",
+        "nearest_interp": false,
+        "to_tensor": true
+      },
+      {
+        "_target_": "AsDiscreted",
+        "keys": "pred",
+        "threshold": 0.5
+      },
+      {
+        "_target_": "Lambdad",
+        "keys": "pred",
+        "func": "$lambda x: torch.where(x[[2]] > 0, 4, torch.where(x[[0]] > 0, 1, torch.where(x[[1]] > 0, 2, 0)))"
+      },
+      {
+        "_target_": "SaveImaged",
+        "keys": "pred",
+        "meta_keys": "pred_meta_dict",
+        "output_dir": "@output_dir",
+        "output_ext": "@output_ext",
+        "output_dtype": "@output_dtype",
+        "output_postfix": "@output_postfix",
+        "separate_folder": "@separate_folder",
+        "resample": false,
+        "squeeze_end_dims": true
+      }
+    ]
+  }
+}

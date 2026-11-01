@@ -1,0 +1,117 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "segresnet-mlx"
+version = "0.3.3"
+description = "Segment brain tumors, renal structures and whole-body CT anatomy with MONAI SegResNet models in native MLX"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Operating System :: MacOS :: MacOS X",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Image Processing",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+keywords = [
+  "mlx",
+  "apple-silicon",
+  "metal",
+  "medical-imaging",
+  "segresnet",
+  "monai",
+  "segmentation",
+  "brats",
+  "ct",
+  "mri",
+]
+license = "Apache-2.0"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+authors = [
+  { name = "Joseph Sandoval" },
+  { name = "Alfredo Sandoval Jr." },
+]
+dependencies = [
+  "medmlx-core==0.2.6",
+  "mlx==0.32.4; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "nibabel>=5.3,<6",
+  "numpy>=2.0,<3",
+]
+
+[project.entry-points."medmlx.models"]
+segresnet-brats = "segresnet_mlx.medmlx:BRATS_MODEL"
+segresnet-renal-cect = "segresnet_mlx.medmlx:RENAL_CECT_MODEL"
+
+[project.urls]
+Homepage = "https://medmlx.org"
+Documentation = "https://github.com/MedMLX/segresnet-mlx/blob/v0.3.3/README.md"
+Repository = "https://github.com/MedMLX/segresnet-mlx"
+Issues = "https://github.com/MedMLX/segresnet-mlx/issues"
+Weights = "https://huggingface.co/models?author=MedMLX&search=segresnet"
+MedMLX = "https://github.com/MedMLX/medmlx"
+
+[project.optional-dependencies]
+dev = [
+  "pyright==1.1.414",
+  "pytorch-ignite>=0.4.11,<0.6",
+  "hypothesis>=6,<7",
+  "monai==1.6.1", # Pinned upstream reference tests and generation only.
+  "pytest>=8.4,<10",
+  "ruff>=0.13,<1",
+  "torch>=2.6,<3",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/segresnet_mlx"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-config --strict-markers"
+markers = ["mlx: native MLX execution requiring Apple Silicon Metal"]
+
+[tool.uv]
+constraint-dependencies = ["setuptools>=84.1.0", "filelock>=4.2.1", ]
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+extend-select = ["TID251", "TID252", "ANN401"]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pyright]
+include = ["scripts","src","tests"]
+extraPaths = ["src", "scripts", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+enableTypeIgnoreComments = false
+reportUnnecessaryTypeIgnoreComment = "error"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.Any" = {msg = "Use a precise type and parse untyped values at the boundary."}
+"typing_extensions.Any" = {msg = "Use a precise type and parse untyped values at the boundary."}
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+  "src/segresnet_mlx",
+  "pyproject.toml",
+  "README.md",
+  "LICENSE",
+  "THIRD_PARTY_NOTICES.md",
+]
