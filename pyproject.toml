@@ -68,9 +68,6 @@ dev = [
   "torch>=2.6,<3",
 ]
 
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/segresnet_mlx"]
 
