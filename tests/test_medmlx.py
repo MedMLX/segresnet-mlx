@@ -1,7 +1,7 @@
 """End-to-end parity with the MONAI bundles and argument rejection before downloads.
 
-The parity fixtures are recorded by scripts/make_medmlx_fixtures.py, which runs the
-original bundles' pinned MONAI transforms on seeded inputs.
+The parity fixtures were recorded by running the original bundles' pinned MONAI
+transforms on seeded inputs.
 """
 
 from __future__ import annotations

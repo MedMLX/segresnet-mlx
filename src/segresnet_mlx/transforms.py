@@ -27,9 +27,6 @@ from medmlx_core.geometry import (
     _bmm as _bmm,
 )
 from medmlx_core.geometry import (
-    _fma as _fma,
-)
-from medmlx_core.geometry import (
     _linspace_from_neg_one as _linspace_from_neg_one,
 )
 from medmlx_core.geometry import (
@@ -104,14 +101,6 @@ def correct_nifti_header(image: NiftiImage) -> None:
             image.set_qform(sform)
             return
     image.header.set_zooms(affine_to_spacing(image.affine, 3))
-
-
-
-
-
-
-
-
 
 
 def orient(
@@ -347,10 +336,6 @@ def write_nifti(path: Path, data: HostArray, affine: Float64Array, dtype: npt.DT
     nib.save(image, str(path))
 
 
-
-
-
-
 def _normalize_transform(shape: Sequence[int]) -> Float64Array:
     """``monai.networks.utils.normalize_transform`` (``align_corners=False``)."""
     size = np.asarray(shape, dtype=np.float64)
@@ -360,10 +345,6 @@ def _normalize_transform(shape: Sequence[int]) -> Float64Array:
     result = np.diag(np.concatenate((norm, np.ones(1, dtype=np.float64))))
     result[:-1, -1] = 1.0 / size - 1.0
     return result
-
-
-
-
 
 
 def _theta(

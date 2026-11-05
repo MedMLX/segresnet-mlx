@@ -12,28 +12,16 @@ if TYPE_CHECKING:
     from medmlx_core.typing import MlxRuntime
     from medmlx_core.volume_workspace import VolumeWorkspace
 
-    from segresnet_mlx._arrays import Float32Array, HostArray
+    from segresnet_mlx._arrays import Float32Array
 
     type Array = mx.array
 
     class WorkspaceOptions(TypedDict, total=False):
         workspace: VolumeWorkspace
 
-    type ArrayValue = bool | int | float | complex | list[ArrayValue] | tuple[ArrayValue, ...]
-
-    class ArrayConstructor(Protocol):
-        def __call__(
-            self, value: HostArray | Array | ArrayValue, dtype: mx.Dtype | None = None
-        ) -> Array:
-            """Construct an MLX array with an optional dtype."""
-            ...
-
     class MLX(MlxRuntime, Protocol):
         all = staticmethod(mx.all)
         isfinite = staticmethod(mx.isfinite)
-        full = staticmethod(mx.full)
-        sum = staticmethod(mx.sum)
-        ones = staticmethod(mx.ones)
         synchronize = staticmethod(mx.synchronize)
         clear_cache = staticmethod(mx.clear_cache)
         load = staticmethod(mx.load)
@@ -63,8 +51,3 @@ if TYPE_CHECKING:
 
     class CoreSlidingWindow(Protocol):
         sliding_window_inference: SlidingWindowInference
-
-    class Metal(Protocol):
-        def is_available(self) -> bool:
-            """Report whether the Metal backend is available."""
-            ...

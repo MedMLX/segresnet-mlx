@@ -17,20 +17,6 @@ from medmlx_core.precision import Float32Operators
 from segresnet_mlx.topology import ArithmeticProfile, SegResNetSpec
 
 
-def group_mean(values: Array, mx: MLX) -> Array:
-    """Mean over the last axis of ``(N, G, S)`` values, summed in 256-element tiles.
-
-    Tiling bounds the float32 accumulation depth of a group that spans a whole
-    volume. The last dimension must be nonempty. Returns ``(N, G, 1)``. ``SegResNet``
-    does not call this (its GroupNorm comes from the ``medmlx_core`` operators); it is
-    exercised by ``tests/test_equivalence.py``.
-    """
-    size = int(values.shape[-1])
-    padded = mx.pad(values, [(0, 0), (0, 0), (0, (-size) % 256)])
-    tiles = mx.reshape(padded, (*values.shape[:2], -1, 256))
-    return mx.sum(mx.sum(tiles, axis=-1), axis=-1, keepdims=True) / size
-
-
 class SegResNet:
     """Raw-logit forward pass for MONAI's 3-D, group-normalized SegResNet.
 

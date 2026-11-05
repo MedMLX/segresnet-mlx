@@ -60,7 +60,7 @@ class Pins(TypedDict):
     monai_version: str
     monai_revision: str
     model_zoo_revision: str
-    files: dict[str, str]
+    files: list[str]
 
 
 class ModelMetadata(TypedDict):

@@ -18,7 +18,6 @@ from medmlx_core.typing import ArrayFactory
 from reference_data import mlx_weights, network_fixture
 
 from segresnet_mlx import SegResNet, forward_patch
-from segresnet_mlx.network import group_mean
 
 pytestmark = pytest.mark.mlx
 
@@ -40,19 +39,13 @@ def test_network_matches_upstream_reference(reference: ModelFixture, mx: MLX) ->
     _assert_float32_reference(as_numpy(output), arrays["output"])
 
 
-def test_single_patch_and_tiled_group_mean_match_upstream(
-    no_decoder_reference: ModelFixture,
-    mx: MLX,
-) -> None:
-    """Compare patch logits and tiled group means with MONAI."""
+def test_single_patch_matches_upstream(no_decoder_reference: ModelFixture, mx: MLX) -> None:
+    """Compare ``forward_patch`` logits with MONAI."""
     spec, arrays, _ = no_decoder_reference
     network = SegResNet(spec, mlx_weights(arrays, mx), mx=mx)
     output = forward_patch(network, arrays["input"])
     assert output.dtype == np.float32
     _assert_float32_reference(output, arrays["output"])
-    mean = group_mean(cast(ArrayFactory, mx.array)(arrays["group_input"]), mx)
-    mx.eval(mean)
-    _assert_float32_reference(as_numpy(mean), arrays["group_output"])
 
 
 def test_encoder_downsampling_and_residuals_match_upstream(mx: MLX) -> None:
