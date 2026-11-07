@@ -6,14 +6,14 @@ Segment brain tumors, renal structures and whole-body CT anatomy with MONAI SegR
 
 [![PyPI](https://img.shields.io/pypi/v/segresnet-mlx)](https://pypi.org/project/segresnet-mlx/)
 [![Python](https://img.shields.io/pypi/pyversions/segresnet-mlx)](https://pypi.org/project/segresnet-mlx/)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue)](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.3/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue)](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.4/LICENSE)
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-MLX-black?logo=apple)](https://github.com/ml-explore/mlx)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97_Hugging_Face-weights-yellow)](https://huggingface.co/MedMLX/segresnet-brats-mlx)
 [![MedMLX](https://img.shields.io/badge/MedMLX-runtime-A51C30)](https://github.com/MedMLX/medmlx)
 
 [BraTS weights](https://huggingface.co/MedMLX/segresnet-brats-mlx) · [Renal weights](https://huggingface.co/MedMLX/segresnet-renal-cect-mlx) · [MedMLX](https://github.com/MedMLX/medmlx)
 
-<img src="https://raw.githubusercontent.com/MedMLX/segresnet-mlx/v0.3.3/docs/example.png" alt="Brain tumor segmentation in axial, coronal and sagittal MRI" width="100%">
+<img src="https://raw.githubusercontent.com/MedMLX/segresnet-mlx/v0.3.4/docs/example.png" alt="Brain tumor segmentation in axial, coronal and sagittal MRI" width="100%">
 
 </div>
 
@@ -43,7 +43,7 @@ For Codex, use `codex mcp add medmlx -- "$MEDMLX" serve --root "$HOME/medmlx-wor
 ```bash
 uv venv --python 3.13
 source .venv/bin/activate
-uv pip install "segresnet-mlx>=0.3.3"
+uv pip install "segresnet-mlx>=0.3.4"
 ```
 
 ## Run
@@ -149,6 +149,6 @@ with Metal and has no CPU fallback.
 
 ## License
 
-[Apache-2.0](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.3/LICENSE). See [third-party notices](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.3/THIRD_PARTY_NOTICES.md). Model weights retain their publisher terms.
+[Apache-2.0](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.4/LICENSE). See [third-party notices](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.4/THIRD_PARTY_NOTICES.md). Model weights retain their publisher terms.
 
 For research and education. Outputs require human review.
