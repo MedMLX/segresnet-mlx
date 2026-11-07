@@ -21,6 +21,8 @@ Segment brain tumors, renal structures and whole-body CT anatomy with MONAI SegR
 | :--- | :--- |
 | MRI sequences or CT volumes | Segmentation on the input grid |
 
+Weights: 19 MB download for `segresnet-brats`, 76 MB for `segresnet-renal-cect`. Peak MLX memory: 4.9 GB for a 240×240×155 four-sequence brain MRI (`segresnet-brats`) and 4.0 GB for a 478×277×161 three-phase CT (`segresnet-renal-cect`).
+
 ## Use with MedMLX
 
 The [MedMLX MCP server](https://github.com/MedMLX/medmlx/blob/main/docs/mcp.md) is the lowest-friction way to use this package. It installs this runtime, downloads its weights on first use, and lets an AI agent describe, check and run `segresnet-brats` and `segresnet-renal-cect` for you.

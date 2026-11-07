@@ -225,6 +225,8 @@ BRATS_MODEL = {
     "label": "SegResNet BraTS MRI",
     "task": "segmentation",
     "run": "segresnet_mlx.medmlx:brats",
+    # Measured MLX peak for a 240x240x155 four-sequence MRI; larger inputs need more.
+    "peak_memory_gb": 5.0,
     "summary": "BraTS brain tumor segmentation from co-registered MRI sequences.",
     "labels": {
         str(value): name
@@ -236,6 +238,8 @@ RENAL_CECT_MODEL = {
     "label": "SegResNet renal CECT",
     "task": "segmentation",
     "run": "segresnet_mlx.medmlx:renal_cect",
+    # Measured MLX peak for a 478x277x161 three-phase CT; larger inputs need more.
+    "peak_memory_gb": 4.1,
     "summary": "Renal structures from arterial, venous and excretory phase CT.",
     "labels": {
         str(value): name
