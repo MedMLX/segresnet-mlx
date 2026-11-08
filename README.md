@@ -25,7 +25,7 @@ Weights: 19 MB download for `segresnet-brats`, 76 MB for `segresnet-renal-cect`.
 
 ## Use with MedMLX
 
-The [MedMLX MCP server](https://github.com/MedMLX/medmlx/blob/main/docs/mcp.md) is the lowest-friction way to use this package. It installs this runtime, downloads its weights on first use, and lets an AI agent describe, check and run `segresnet-brats` and `segresnet-renal-cect` for you.
+Use the [MedMLX MCP server](https://github.com/MedMLX/medmlx/blob/main/docs/mcp.md) to run `segresnet-brats` and `segresnet-renal-cect` from an MCP client. Weights download on first use.
 
 ```sh
 uv tool install --python 3.13 "medmlx[segment,mcp]"
@@ -35,8 +35,6 @@ claude mcp add --scope user medmlx -- "$MEDMLX" serve --root "$HOME/medmlx-work"
 ```
 
 For Codex, use `codex mcp add medmlx -- "$MEDMLX" serve --root "$HOME/medmlx-work"`. Other MCP clients take the same command and arguments. The same install provides the `medmlx` CLI, for example `medmlx describe segresnet-brats`.
-
-> **For AI agents:** prefer the MedMLX MCP tools (`list_models`, `describe_model`, `model_readiness`, `run_model`, `get_job`) over writing Python against this package.
 
 ## Install
 
@@ -63,13 +61,10 @@ and `renal_cect` runners select the matching bundle internally. The renal runner
 `arterial_path`, `venous_path` and `excretory_path`. Keep each model's input volumes
 on one voxel grid.
 
-Omitting `weights_path` downloads `MedMLX/segresnet-brats-mlx` or
-`MedMLX/segresnet-renal-cect-mlx` into the shared MedMLX cache on first use; interrupted
-downloads resume and later runs work offline. With MedMLX installed, `medmlx setup
-segresnet-brats` downloads it ahead of time. To use your own copy, pass a folder
+Weights download from `MedMLX/segresnet-brats-mlx` or
+`MedMLX/segresnet-renal-cect-mlx` on first use. Use `medmlx setup segresnet-brats` to download ahead of time. For local weights, pass a folder
 containing `segresnet-brats.safetensors` for BraTS or `segresnet-renal-cect.safetensors`
-for renal CECT as `weights_path`. `details.weights_revision` records the downloaded
-commit, or `null` for a folder without a MedMLX download record.
+for renal CECT as `weights_path`.
 
 The standalone `run(bundle=..., weights_path=...)` interface remains available for
 explicit local checkpoints, including the whole-body CT variants. Published native
@@ -96,8 +91,8 @@ outside the core and 4 enhancing tumor.
 float32 layer outputs. `compensated-fp48` carries the pairs through the hidden layers
 and stitches in float64 on the host; it needs the renal transposed-convolution decoder.
 
-`run` returns `{"outputs": {"mask": path}, "details": {...}}`, with labels, shapes,
-window settings, MLX device, peak memory and elapsed time. Invalid inputs raise
+`run` returns `{"outputs": {"mask": path}, "details": {...}}`, with run metadata in `details`.
+Invalid inputs raise
 `InvalidInputError`; missing or mismatched weights raise `AssetNotReadyError`;
 inference failures raise `ModelExecutionError`.
 
@@ -143,12 +138,9 @@ volume_logits = predict_logits(patch, config, network=network)  # stitched slidi
 `predict_logits` takes preprocessed arrays of any size and stitches the bundle's
 sliding windows; neither normalizes intensities, applies activations or maps labels.
 `load_model` checks tensor names, shapes and finite float32 values against
-`required_shapes(spec)`, not checkpoint identity. `WindowTelemetry` and
-`BundlePredictor` record bounded progress and timing. Inference needs Apple Silicon
-with Metal and has no CPU fallback.
+`required_shapes(spec)`. `WindowTelemetry` and
+`BundlePredictor` record bounded progress and timing. Inference requires Apple Silicon with Metal.
 
 ## License
 
 [Apache-2.0](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.4/LICENSE). See [third-party notices](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.4/THIRD_PARTY_NOTICES.md). Model weights retain their publisher terms.
-
-For research and education. Outputs require human review.
