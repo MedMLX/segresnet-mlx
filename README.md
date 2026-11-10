@@ -13,7 +13,7 @@ Segment brain tumors, renal structures and whole-body CT anatomy with MONAI SegR
 
 [BraTS weights](https://huggingface.co/MedMLX/segresnet-brats-mlx) · [Renal weights](https://huggingface.co/MedMLX/segresnet-renal-cect-mlx) · [MedMLX](https://github.com/MedMLX/medmlx)
 
-<img src="https://raw.githubusercontent.com/MedMLX/segresnet-mlx/v0.3.4/docs/example.png" alt="Brain tumor segmentation in axial, coronal and sagittal MRI" width="100%">
+<img src="https://raw.githubusercontent.com/MedMLX/segresnet-mlx/main/docs/example.png" alt="Brain tumor segmentation in axial, coronal and sagittal MRI" width="100%">
 
 </div>
 
