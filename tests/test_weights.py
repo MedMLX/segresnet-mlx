@@ -14,7 +14,7 @@ from segresnet_mlx import load_model
 pytestmark = pytest.mark.mlx
 
 
-@pytest.mark.parametrize("corruption", ["format", "keys", "shape", "dtype"])
+@pytest.mark.parametrize("corruption", ["format", "keys", "shape", "dtype", "nan", "inf"])
 def test_load_model_rejects_invalid_checkpoints(
     no_decoder_reference: ModelFixture, tmp_path: Path, corruption: str
 ) -> None:
@@ -31,6 +31,8 @@ def test_load_model_rejects_invalid_checkpoints(
         weights[key] = mx.zeros((1,), dtype=mx.float32)
     elif corruption == "dtype":
         weights[key] = weights[key].astype(mx.float16)
+    elif corruption in ("nan", "inf"):
+        weights[key] = weights[key] * 0 + float(corruption)
     destination = tmp_path / ("model.npz" if corruption == "format" else "invalid.safetensors")
     if corruption != "format":
         mx.save_safetensors(str(destination), weights)

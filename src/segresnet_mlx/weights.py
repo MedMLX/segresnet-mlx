@@ -101,9 +101,14 @@ def load_model(
                 f"SegResNet MLX parameter {key!r} has shape {shape}; expected {expected_shape}"
             )
     for key, value in weights.items():
-        if value.dtype != mx.float32 or not bool(mx.all(mx.isfinite(value)).item()):
+        if value.dtype != mx.float32:
             raise InvalidInputError(f"SegResNet MLX parameter {key!r} must be finite float32")
-    mx.eval(weights)
+    finite = {key: mx.all(mx.isfinite(value)) for key, value in weights.items()}
+    # Evaluate every admitted tensor and its check together before reading scalars.
+    mx.eval(weights, finite)
+    for key, valid in finite.items():
+        if not bool(valid.item()):
+            raise InvalidInputError(f"SegResNet MLX parameter {key!r} must be finite float32")
     return SegResNet(spec, weights, mx=mx, arithmetic_profile=arithmetic_profile)
 
 
