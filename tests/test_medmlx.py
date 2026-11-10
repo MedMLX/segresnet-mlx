@@ -38,7 +38,15 @@ REGISTERED = {
 
 @pytest.mark.parametrize("variant", list(REGISTERED))
 @pytest.mark.parametrize(
-    "problem", ["absent-path", "unknown-profile", "non-bool", "existing-output"]
+    "problem",
+    [
+        "absent-path",
+        "unknown-profile",
+        "non-bool",
+        "existing-output",
+        "non-bool-streaming",
+        "absent-scratch",
+    ],
 )
 def test_registered_runners_reject_arguments_before_downloading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str, problem: str
@@ -63,11 +71,49 @@ def test_registered_runners_reject_arguments_before_downloading(
         arguments["arithmetic_profile"] = "fp16"
     elif problem == "non-bool":
         arguments["overwrite"] = "false"
+    elif problem == "non-bool-streaming":
+        arguments["streaming"] = "false"
+    elif problem == "absent-scratch":
+        arguments.update(streaming=True, scratch_dir=str(tmp_path / "missing-scratch"))
     else:
         output.mkdir()
         (output / f"{bundle}_mask.nii.gz").write_bytes(b"previous")
     with pytest.raises(InvalidInputError):
         getattr(medmlx, variant)(**arguments)
+
+
+@pytest.mark.parametrize("variant", list(REGISTERED))
+@pytest.mark.mlx
+def test_registered_streaming_runner_preserves_upstream_labels_and_cleans_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    variant: str,
+) -> None:
+    from segresnet_mlx._runtime import import_mlx
+
+    mx = import_mlx()
+    bundle, _ = REGISTERED[variant]
+    name = "renal" if variant == "renal_cect" else "brats"
+    arrays, _ = bundle_fixture(name)
+    spec = segresnet_spec(json.loads(str(arrays["runner::spec"])))
+    monkeypatch.setitem(BUNDLES, bundle, replace(BUNDLES[bundle], spec=spec, roi_size=(8, 8, 8)))
+    weights = tmp_path / "seeded.safetensors"
+    mx.save_safetensors(str(weights), mlx_weights(arrays, mx, "runner::weight::"))
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    result = getattr(medmlx, variant)(
+        **write_inputs(tmp_path, name, "axis"),
+        weights_path=str(weights),
+        output_dir=str(tmp_path / "out"),
+        streaming=True,
+        scratch_dir=str(scratch),
+    )
+    np.testing.assert_array_equal(
+        np.asanyarray(nib.load(result["outputs"]["mask"]).dataobj),
+        arrays["axis::runner_mask"],
+    )
+    assert result["details"]["streaming"] is True
+    assert not list(scratch.iterdir())
 
 
 @pytest.mark.parametrize(

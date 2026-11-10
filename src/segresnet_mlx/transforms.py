@@ -278,6 +278,23 @@ def argmax_channel(data: Float32Array) -> Float32Array:
     return np.argmax(data, axis=0)[None].astype(np.float32, copy=False)
 
 
+def softmax_argmax_channel(data: Float32Array) -> Float32Array:
+    """Select labels after the existing FP32 softmax in bounded spatial blocks.
+
+    Keep softmax's rounding and lowest-index ties. Gathering coordinates avoids
+    a full logits copy for noncontiguous callers; no probability volume is retained.
+    """
+    shape = data.shape[1:]
+    output = np.empty((1, *shape), dtype=np.float32)
+    labels = output.reshape(-1)
+    for start in range(0, labels.size, 8192):
+        stop = min(start + 8192, labels.size)
+        positions = np.unravel_index(np.arange(start, stop), shape)
+        block = data[(slice(None), *positions)]
+        labels[start:stop] = argmax_channel(softmax_channel(block))[0]
+    return output
+
+
 def sigmoid(data: Float32Array) -> Float32Array:
     """Float32 sigmoid with a stable negative tail and source threshold rounding."""
     one = np.float32(1.0)

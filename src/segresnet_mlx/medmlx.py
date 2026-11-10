@@ -389,8 +389,13 @@ def run(
         "image_path": image_path,
     }
     config, mask_path = _check_arguments(
-        bundle, values, output_dir, overwrite=overwrite,
-        arithmetic_profile=arithmetic_profile, streaming=streaming,
+        bundle,
+        values,
+        output_dir,
+        overwrite=overwrite,
+        arithmetic_profile=arithmetic_profile,
+        streaming=streaming,
+        scratch_dir=scratch_dir,
     )
     output_root = mask_path.parent
     weights = _weights_file(weights_path)
@@ -408,7 +413,7 @@ def run(
     if streaming:
         from medmlx_core.volume_workspace import VolumeWorkspace
 
-        context = VolumeWorkspace(scratch_dir)
+        context = VolumeWorkspace(Path(scratch_dir).expanduser() if scratch_dir else None)
     else:
         context = nullcontext(None)
     with context as workspace:
@@ -475,6 +480,8 @@ def brats(
     weights_path: str | None = None,
     overwrite: bool = False,
     arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
+    streaming: bool = False,
+    scratch_dir: str | None = None,
 ) -> RunResult:
     """Segment BraTS MRI; omit weights_path to download its cached model folder.
 
@@ -494,21 +501,34 @@ def brats(
         overwrite: Replace an existing output mask when true.
         arithmetic_profile: ``torch-order-fp32`` (default) or ``compensated-fp32``;
             ``compensated-fp48`` requires the renal bundle.
+        streaming: Use bounded blending and mapped logits, as in ``run``.
+        scratch_dir: Existing parent directory for temporary streaming maps.
     """
     _check_arguments(
         "brats_mri_segmentation",
         {"t1c_path": t1c_path, "t1_path": t1_path, "t2_path": t2_path, "flair_path": flair_path},
-        output_dir, overwrite=overwrite, arithmetic_profile=arithmetic_profile,
+        output_dir,
+        overwrite=overwrite,
+        arithmetic_profile=arithmetic_profile,
+        streaming=streaming,
+        scratch_dir=scratch_dir,
     )
     folder = (
-        weights_dir("segresnet-brats")
-        if weights_path is None else Path(weights_path).expanduser()
+        weights_dir("segresnet-brats") if weights_path is None else Path(weights_path).expanduser()
     )
     checkpoint = folder / "segresnet-brats.safetensors" if folder.is_dir() else folder
     return run(
-        bundle="brats_mri_segmentation", weights_path=str(checkpoint), output_dir=output_dir,
-        t1c_path=t1c_path, t1_path=t1_path, t2_path=t2_path, flair_path=flair_path,
-        overwrite=overwrite, arithmetic_profile=arithmetic_profile,
+        bundle="brats_mri_segmentation",
+        weights_path=str(checkpoint),
+        output_dir=output_dir,
+        t1c_path=t1c_path,
+        t1_path=t1_path,
+        t2_path=t2_path,
+        flair_path=flair_path,
+        overwrite=overwrite,
+        arithmetic_profile=arithmetic_profile,
+        streaming=streaming,
+        scratch_dir=scratch_dir,
     )
 
 
@@ -521,6 +541,8 @@ def renal_cect(
     weights_path: str | None = None,
     overwrite: bool = False,
     arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
+    streaming: bool = False,
+    scratch_dir: str | None = None,
 ) -> RunResult:
     """Segment renal CECT; omit weights_path to download its cached model folder.
 
@@ -540,22 +562,39 @@ def renal_cect(
         overwrite: Replace an existing output mask when true.
         arithmetic_profile: ``torch-order-fp32`` (default), ``compensated-fp32``
             or ``compensated-fp48``; see ``run`` for their arithmetic contracts.
+        streaming: Use bounded blending and mapped logits, as in ``run``.
+        scratch_dir: Existing parent directory for temporary streaming maps.
     """
     _check_arguments(
         "renalStructures_CECT_segmentation",
-        {"arterial_path": arterial_path, "venous_path": venous_path,
-         "excretory_path": excretory_path},
-        output_dir, overwrite=overwrite, arithmetic_profile=arithmetic_profile,
+        {
+            "arterial_path": arterial_path,
+            "venous_path": venous_path,
+            "excretory_path": excretory_path,
+        },
+        output_dir,
+        overwrite=overwrite,
+        arithmetic_profile=arithmetic_profile,
+        streaming=streaming,
+        scratch_dir=scratch_dir,
     )
     folder = (
         weights_dir("segresnet-renal-cect")
-        if weights_path is None else Path(weights_path).expanduser()
+        if weights_path is None
+        else Path(weights_path).expanduser()
     )
     checkpoint = folder / "segresnet-renal-cect.safetensors" if folder.is_dir() else folder
     return run(
-        bundle="renalStructures_CECT_segmentation", weights_path=str(checkpoint),
-        output_dir=output_dir, arterial_path=arterial_path, venous_path=venous_path,
-        excretory_path=excretory_path, overwrite=overwrite, arithmetic_profile=arithmetic_profile,
+        bundle="renalStructures_CECT_segmentation",
+        weights_path=str(checkpoint),
+        output_dir=output_dir,
+        arterial_path=arterial_path,
+        venous_path=venous_path,
+        excretory_path=excretory_path,
+        overwrite=overwrite,
+        arithmetic_profile=arithmetic_profile,
+        streaming=streaming,
+        scratch_dir=scratch_dir,
     )
 
 
@@ -567,6 +606,7 @@ def _check_arguments(
     overwrite: bool,
     arithmetic_profile: ArithmeticProfile,
     streaming: bool = False,
+    scratch_dir: str | None = None,
 ) -> tuple[Bundle, Path]:
     """Check every ``run`` argument before weights, inputs or MLX are loaded.
 
@@ -598,6 +638,8 @@ def _check_arguments(
     for name, flag in (("overwrite", overwrite), ("streaming", streaming)):
         if not isinstance(cast(object, flag), bool):
             raise InvalidInputError(f"{name} must be true or false")
+    if streaming and scratch_dir is not None and not Path(scratch_dir).expanduser().is_dir():
+        raise InvalidInputError("scratch_dir must name an existing directory")
     output_root = Path(output_dir).expanduser().resolve()
     if output_root.exists() and not output_root.is_dir():
         raise InvalidInputError(f"output_dir is not a directory: {output_root}")
@@ -714,8 +756,7 @@ def postprocess_wholebody(logits: Float32Array, inverse: SpatialInverse) -> Floa
     """
     # Kept to mirror the bundle's Activationsd(softmax=True) step; in exact
     # arithmetic it does not change the argmax.
-    probabilities = transforms.softmax_channel(logits)
-    labels = transforms.argmax_channel(probabilities)
+    labels = transforms.softmax_argmax_channel(logits)
     values, affine = transforms.invert_spacing(
         labels, inverse.affine, inverse.resampling, "nearest"
     )
@@ -730,16 +771,9 @@ def postprocess_streaming(
     workspace: VolumeWorkspace,
 ) -> MaskArray:
     """Retain each bundle's activation/restoration/label order with bounded class storage."""
-    from medmlx_core.volume_workspace import restored_argmax
-
     if bundle in _WHOLE_BODY_PIXDIM:
         assert inverse is not None
-        probabilities = workspace.map_channels(logits, transforms.softmax_channel)
-        labels = restored_argmax(probabilities, lambda channel: channel)[None]
-        values, affine = transforms.invert_spacing(
-            labels, inverse.affine, inverse.resampling, "nearest"
-        )
-        return transforms.invert_orientation(values, affine, inverse.orientation)[0][0]
+        return postprocess_wholebody(logits, inverse)
     if bundle == "renalStructures_CECT_segmentation":
         assert inverse is not None
         labels: Float32Array | None = None

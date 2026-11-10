@@ -96,6 +96,22 @@ def test_softmax_and_argmax_channel_match_torch(seed: int) -> None:
     np.testing.assert_array_equal(labels, expected)
 
 
+@pytest.mark.parametrize("strided", [False, True])
+def test_bounded_softmax_labels_preserve_rounding_ties_across_blocks(strided: bool) -> None:
+    data = np.random.default_rng(42).normal(0, 5, (105, 17, 19, 29)).astype(np.float32)
+    data[:, 0, 0, :2] = 0
+    # Different logits can round to equal softmax probabilities. Class 0 still
+    # wins, so moving argmax ahead of softmax would change these labels.
+    data[1, 0, 0, 0] = np.nextafter(np.float32(0), np.float32(1))
+    if strided:
+        data = data[:, ::-1, :, ::-1]
+    expected = transforms.argmax_channel(transforms.softmax_channel(data))
+    actual = transforms.softmax_argmax_channel(data)
+    np.testing.assert_array_equal(actual, expected)
+    if not strided:
+        assert actual[0, 0, 0, 0] == 0
+
+
 @given(
     seed=st.integers(0, 2**32 - 1),
     constant=st.booleans(),
@@ -274,4 +290,3 @@ def test_loader_uses_the_upstream_nibabel_affine(tmp_path: Path, forms: str) -> 
     assert np.array_equal(volume.affine, arrays[f"{forms}::affine"])
     assert np.array_equal(volume.data, arrays[f"{forms}::data"])
     assert path.read_bytes() == original
-
