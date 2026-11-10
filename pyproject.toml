@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "segresnet-mlx"
-version = "0.3.4"
+version = "0.3.5"
 description = "Segment brain tumors, renal structures and whole-body CT anatomy with MONAI SegResNet models in native MLX"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"

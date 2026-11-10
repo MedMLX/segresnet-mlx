@@ -190,8 +190,8 @@ BUNDLES: dict[str, Bundle] = {
         roles=("t1c_path", "t1_path", "t2_path", "flair_path"),
         labels={
             0: "background",
-            1: "tumor core, not enhancing",
-            2: "whole tumor outside the core",
+            1: "necrotic/non-enhancing tumor core",
+            2: "peritumoral edema",
             4: "enhancing tumor",
         },
         output_dtype="uint8",

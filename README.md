@@ -78,7 +78,7 @@ unspecified. The mask is written on the input grid as the NIfTI reader corrects 
 
 | Model | Mask dtype | Labels |
 | :--- | :--- | :--- |
-| `segresnet-brats` | uint8 | 1 tumor core, 2 whole tumor outside the core, 4 enhancing tumor |
+| `segresnet-brats` | uint8 | 1 necrotic/non-enhancing tumor core, 2 peritumoral edema, 4 enhancing tumor |
 | `segresnet-renal-cect` | float32 | 1 artery, 2 vein, 3 ureter, 4 neoplasm, 5 parenchyma |
 
 | `arithmetic_profile` | Arithmetic |

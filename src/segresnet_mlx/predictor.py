@@ -35,7 +35,7 @@ class SlidingWindowConfig:
     Attributes:
         roi_size: Window size in voxels, ``(D, H, W)`` of the preprocessed volume.
         sw_batch_size: Windows sent to the network per call.
-        overlap: Fraction of each window shared with its neighbour, in ``[0, 1)``.
+        overlap: Fraction of each window shared with its neighbor, in ``[0, 1)``.
         mode: Window blending, ``"constant"`` or ``"gaussian"`` (sigma scale 0.125).
         padding_mode: How a volume smaller than ``roi_size`` is padded: ``"constant"``
             (zeros), ``"reflect"``, ``"replicate"`` or ``"circular"``.
