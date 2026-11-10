@@ -73,8 +73,9 @@ def load_model(
     """Load converted float32 safetensors into a ``SegResNet`` for ``spec``.
 
     Raises:
-        InvalidInputError: If the loaded value is not a mapping, its keys or shapes differ
-            from ``required_shapes(spec)``, or a parameter is not finite float32.
+        InvalidInputError: If ``weights_path`` does not end in ``.safetensors``, the
+            loaded value is not a mapping, its keys or shapes differ from
+            ``required_shapes(spec)``, or a parameter is not finite float32.
         RuntimeError: If MLX cannot open or decode the weights file.
     """
     if Path(weights_path).suffix != ".safetensors":
