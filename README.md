@@ -13,6 +13,10 @@ Segment renal arteries, veins, ureters, tumors and parenchyma in multiphase CT w
 
 [Weights](https://huggingface.co/MedMLX/segresnet-renal-cect-mlx) · [Upstream bundle](https://github.com/Project-MONAI/model-zoo/tree/dev/models/renalStructures_CECT_segmentation) · [MedMLX](https://github.com/MedMLX/medmlx)
 
+<img src="https://raw.githubusercontent.com/MedMLX/segresnet-mlx/main/docs/example.png" alt="Venous-phase CT of a left kidney with a renal tumor, the predicted renal labels on that slice, and a 3D view of the predicted kidney, tumor, vessels and collecting system" width="100%">
+
+<sub>Three-phase CT from <a href="https://doi.org/10.7937/k9/tcia.2018.oblamn27">CPTAC-CCRCC</a> case C3N-00380 (The Cancer Imaging Archive, CC BY 4.0), segmented on a crop around each kidney. The 3D view smooths surfaces and hides fragments under 0.5 mL and labels more than 20 mm from the kidney.</sub>
+
 </div>
 
 | Input | Output |
