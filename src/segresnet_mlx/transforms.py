@@ -313,6 +313,21 @@ def threshold(data: Float32Array, value: float = 0.5) -> Float32Array:
     return (data >= value).astype(np.float32)
 
 
+def sigmoid_threshold_mask(data: Float32Array) -> npt.NDArray[np.bool_]:
+    """Threshold float32 sigmoid at 0.5 without exponentiating distant logits."""
+    sample = data.flat[::1024]
+    near_sample = (sample < np.float32(0.0)) & (sample >= np.float32(-0.001))
+    # Dense near-zero data costs more to index than to evaluate in one pass.
+    if np.count_nonzero(near_sample) > sample.size // 4:
+        return sigmoid(data) >= np.float32(0.5)
+    active = data >= np.float32(0.0)
+    near_negative = (data < np.float32(0.0)) & (data >= np.float32(-0.001))
+    # Negative values close to zero can round to sigmoid == 0.5 in float32.
+    # At or below -0.001 the result is safely below the threshold.
+    active[near_negative] = sigmoid(data[near_negative]) >= np.float32(0.5)
+    return active
+
+
 def merge_classes(binary: Float32Array) -> Float32Array:
     """The renal bundle's ``MergeClassesd``: the lowest nonzero channel index wins.
 
@@ -327,7 +342,7 @@ def merge_classes(binary: Float32Array) -> Float32Array:
     return merged[None].astype(np.float32, copy=False)
 
 
-def brats_labels(binary: Float32Array) -> npt.NDArray[np.int64]:
+def brats_labels(binary: Float32Array | npt.NDArray[np.bool_]) -> npt.NDArray[np.int64]:
     """BraTS bundle ``Lambdad``: ET (channel 2) -> 4, TC (0) -> 1, WT (1) -> 2.
 
     ``binary`` is ``(3, *spatial)`` with channels (TC, WT, ET). Returns int64

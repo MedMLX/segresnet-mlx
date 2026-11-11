@@ -703,7 +703,7 @@ def postprocess_renal(logits: Float32Array, inverse: SpatialInverse) -> Float32A
     """
     values, affine = transforms.invert_spacing(logits, inverse.affine, inverse.resampling)
     values, _ = transforms.invert_orientation(values, affine, inverse.orientation)
-    binary = transforms.threshold(transforms.sigmoid(values), 0.5)
+    binary = transforms.sigmoid_threshold_mask(values).astype(np.float32)
     return transforms.merge_classes(binary)[0]
 
 
@@ -724,7 +724,7 @@ def postprocess_brats(logits: Float32Array) -> transforms.npt.NDArray[np.int64]:
     ``logits`` is ``(3, *spatial)`` with channels (tumor core, whole tumor, enhancing
     tumor). Returns an int64 label volume with values 0, 1, 2 and 4.
     """
-    binary = transforms.threshold(transforms.sigmoid(logits), 0.5)
+    binary = transforms.sigmoid_threshold_mask(logits)
     return transforms.brats_labels(binary)[0]
 
 
@@ -782,7 +782,7 @@ def postprocess_streaming(
                 logits[channel : channel + 1], inverse.affine, inverse.resampling
             )
             values, _ = transforms.invert_orientation(values, affine, inverse.orientation)
-            active = transforms.threshold(transforms.sigmoid(values), 0.5)[0] != 0
+            active = transforms.sigmoid_threshold_mask(values)[0]
             if labels is None:
                 labels = np.zeros(active.shape, dtype=np.float32)
             labels[(labels == 0) & active] = channel
@@ -794,7 +794,7 @@ def postprocess_streaming(
     output = np.empty(flat.shape[1], dtype=np.int64)
     for start in range(0, flat.shape[1], 65536):
         stop = min(start + 65536, flat.shape[1])
-        binary = transforms.threshold(transforms.sigmoid(flat[:, start:stop]), 0.5)
+        binary = transforms.sigmoid_threshold_mask(flat[:, start:stop])
         output[start:stop] = transforms.brats_labels(binary)[0]
     return output.reshape(logits.shape[1:])
 

@@ -198,6 +198,36 @@ class BundlePredictor:
             require_ncdhw(host, name="SegResNet input")
             if self.telemetry is not None:
                 self.telemetry.set_metadata({"sw_batch_size": configuration.sw_batch_size})
+            if (
+                workspace is None
+                and host.shape[0] == 1
+                and host.shape[1] > 0
+                and configuration.mode == "constant"
+                and configuration.padding_mode == "constant"
+                and configuration.sw_batch_size >= 1
+                and 0 <= configuration.overlap < 1
+                and all(
+                    roi > 0 and 0 < size <= roi
+                    for size, roi in zip(host.shape[2:], configuration.roi_size, strict=True)
+                )
+            ):
+                padding = tuple(
+                    ((roi - size) // 2, (roi - size + 1) // 2)
+                    for size, roi in zip(host.shape[2:], configuration.roi_size, strict=True)
+                )
+                if any(before or after for before, after in padding):
+                    window = np.ascontiguousarray(
+                        np.pad(host, ((0, 0), (0, 0), *padding), mode="constant")
+                    )
+                else:
+                    window = host
+                crop = tuple(
+                    slice(before, before + size)
+                    for (before, _), size in zip(padding, host.shape[2:], strict=True)
+                )
+                # One constant-weight window contributes its logits exactly once;
+                # blending would only copy and divide the same full volume.
+                return self._forward_window(window)[(slice(None), slice(None), *crop)]
             return sliding_window_inference(
                 host,
                 configuration.roi_size,
