@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from segresnet_mlx.weights import load_model as load_model
     from segresnet_mlx.weights import required_shapes as required_shapes
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 _EXPORTS = {
     "BUNDLE_CONFIGS": "segresnet_mlx.predictor",
