@@ -6,7 +6,7 @@ Segment brain tumors, renal structures and whole-body CT anatomy with MONAI SegR
 
 [![PyPI](https://img.shields.io/pypi/v/segresnet-mlx)](https://pypi.org/project/segresnet-mlx/)
 [![Python](https://img.shields.io/pypi/pyversions/segresnet-mlx)](https://pypi.org/project/segresnet-mlx/)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue)](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.4/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue)](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.6/LICENSE)
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-MLX-black?logo=apple)](https://github.com/ml-explore/mlx)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97_Hugging_Face-weights-yellow)](https://huggingface.co/MedMLX/segresnet-brats-mlx)
 [![MedMLX](https://img.shields.io/badge/MedMLX-runtime-A51C30)](https://github.com/MedMLX/medmlx)
@@ -31,7 +31,7 @@ Segment brain tumors, renal structures and whole-body CT anatomy with MONAI SegR
 ```bash
 uv venv --python 3.13
 source .venv/bin/activate
-uv pip install "segresnet-mlx>=0.3.4"
+uv pip install "segresnet-mlx>=0.3.6"
 ```
 
 ## Run
@@ -176,4 +176,4 @@ For Codex, use `codex mcp add medmlx -- "$MEDMLX" serve --root "$HOME/medmlx-wor
 
 ## License
 
-[Apache-2.0](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.4/LICENSE). See [third-party notices](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.4/THIRD_PARTY_NOTICES.md). Model weights retain their publisher terms.
+[Apache-2.0](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.6/LICENSE). See [third-party notices](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.6/THIRD_PARTY_NOTICES.md). Model weights retain their publisher terms.
