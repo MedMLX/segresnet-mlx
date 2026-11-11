@@ -1,4 +1,4 @@
-"""End-to-end parity with the MONAI bundles and argument rejection before downloads.
+"""End-to-end parity with the MONAI renal bundle and argument rejection before downloads.
 
 The parity fixtures were recorded by running the original bundles' pinned MONAI
 transforms on seeded inputs.
@@ -7,12 +7,13 @@ transforms on seeded inputs.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, cast
 
 from segresnet_mlx._arrays import Float32Array, NumericArray
-from segresnet_mlx._records import Runtime
+from segresnet_mlx._records import RunResult, Runtime
 
 if TYPE_CHECKING:
     from segresnet_mlx.network import SegResNet
@@ -27,16 +28,9 @@ from segresnet_mlx._nifti import nib
 from segresnet_mlx.medmlx import BUNDLES, run
 
 RENAL = "renalStructures_CECT_segmentation"
-BRATS = "brats_mri_segmentation"
-WHOLE_BODY = "wholeBody_ct_segmentation"
-WHOLE_BODY_LOWRES = "wholeBody_ct_segmentation_lowres"
-REGISTERED = {
-    "brats": (BRATS, ("t1c_path", "t1_path", "t2_path", "flair_path")),
-    "renal_cect": (RENAL, ("arterial_path", "venous_path", "excretory_path")),
-}
+ROLES = ("arterial_path", "venous_path", "excretory_path")
 
 
-@pytest.mark.parametrize("variant", list(REGISTERED))
 @pytest.mark.parametrize(
     "problem",
     [
@@ -49,7 +43,7 @@ REGISTERED = {
     ],
 )
 def test_registered_runners_reject_arguments_before_downloading(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str, problem: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, problem: str
 ) -> None:
     """Each category of bad argument fails before any weight download."""
 
@@ -58,15 +52,14 @@ def test_registered_runners_reject_arguments_before_downloading(
         pytest.fail(f"downloaded {model_id} before checking arguments")
 
     monkeypatch.setattr(medmlx, "weights_dir", download)
-    bundle, roles = REGISTERED[variant]
     output = tmp_path / "out"
     arguments: dict[str, object] = {"output_dir": str(output)}
-    for role in roles:
+    for role in ROLES:
         path = tmp_path / f"{role}.nii.gz"
         path.write_bytes(b"read only after the arguments are checked")
         arguments[role] = str(path)
     if problem == "absent-path":
-        arguments[roles[0]] = str(tmp_path / "absent.nii.gz")
+        arguments[ROLES[0]] = str(tmp_path / "absent.nii.gz")
     elif problem == "unknown-profile":
         arguments["arithmetic_profile"] = "fp16"
     elif problem == "non-bool":
@@ -77,32 +70,30 @@ def test_registered_runners_reject_arguments_before_downloading(
         arguments.update(streaming=True, scratch_dir=str(tmp_path / "missing-scratch"))
     else:
         output.mkdir()
-        (output / f"{bundle}_mask.nii.gz").write_bytes(b"previous")
+        (output / f"{RENAL}_mask.nii.gz").write_bytes(b"previous")
+    # Arguments are deliberately mistyped, so call through an untyped signature.
+    runner: Callable[..., RunResult] = medmlx.renal_cect
     with pytest.raises(InvalidInputError):
-        getattr(medmlx, variant)(**arguments)
+        runner(**arguments)
 
 
-@pytest.mark.parametrize("variant", list(REGISTERED))
 @pytest.mark.mlx
 def test_registered_streaming_runner_preserves_upstream_labels_and_cleans_workspace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    variant: str,
 ) -> None:
     from segresnet_mlx._runtime import import_mlx
 
     mx = import_mlx()
-    bundle, _ = REGISTERED[variant]
-    name = "renal" if variant == "renal_cect" else "brats"
-    arrays, _ = bundle_fixture(name)
+    arrays, _ = bundle_fixture("renal")
     spec = segresnet_spec(json.loads(str(arrays["runner::spec"])))
-    monkeypatch.setitem(BUNDLES, bundle, replace(BUNDLES[bundle], spec=spec, roi_size=(8, 8, 8)))
+    monkeypatch.setitem(BUNDLES, RENAL, replace(BUNDLES[RENAL], spec=spec, roi_size=(8, 8, 8)))
     weights = tmp_path / "seeded.safetensors"
     mx.save_safetensors(str(weights), mlx_weights(arrays, mx, "runner::weight::"))
     scratch = tmp_path / "scratch"
     scratch.mkdir()
-    result = getattr(medmlx, variant)(
-        **write_inputs(tmp_path, name, "axis"),
+    result = medmlx.renal_cect(
+        **write_inputs(tmp_path, "renal", "axis"),
         weights_path=str(weights),
         output_dir=str(tmp_path / "out"),
         streaming=True,
@@ -112,27 +103,16 @@ def test_registered_streaming_runner_preserves_upstream_labels_and_cleans_worksp
         np.asanyarray(nib.load(result["outputs"]["mask"]).dataobj),
         arrays["axis::runner_mask"],
     )
-    assert result["details"]["streaming"] is True
+    assert result["details"].get("streaming") is True
     assert not list(scratch.iterdir())
 
 
-@pytest.mark.parametrize(
-    ("name", "bundle"),
-    [
-        ("renal", RENAL),
-        ("brats", BRATS),
-        ("wholebody", WHOLE_BODY),
-        ("wholebody_lowres", WHOLE_BODY_LOWRES),
-    ],
-)
 @pytest.mark.parametrize("case", ["axis", "flipped", "oblique"])
 @pytest.mark.parametrize("suffix", ["runner", "runner_decoder"])
 @pytest.mark.mlx
 def test_runner_matches_the_original_upstream_pipeline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    name: str,
-    bundle: str,
     case: str,
     suffix: str,
 ) -> None:
@@ -140,9 +120,9 @@ def test_runner_matches_the_original_upstream_pipeline(
     from segresnet_mlx._runtime import import_mlx
 
     mx = import_mlx()
-    arrays, _ = bundle_fixture(name)
+    arrays, _ = bundle_fixture("renal")
     spec = segresnet_spec(json.loads(str(arrays[f"{suffix}::spec"])))
-    monkeypatch.setitem(BUNDLES, bundle, replace(BUNDLES[bundle], spec=spec, roi_size=(8, 8, 8)))
+    monkeypatch.setitem(BUNDLES, RENAL, replace(BUNDLES[RENAL], spec=spec, roi_size=(8, 8, 8)))
     predict = medmlx.predict
 
     def measured(
@@ -150,8 +130,7 @@ def test_runner_matches_the_original_upstream_pipeline(
     ) -> tuple[Float32Array, Runtime]:
         """Check raw logits against the recording before returning the runtime record."""
         output, runtime = predict(network, image, config)
-        # Torch and MLX accumulate convolutions differently, and BraTS
-        # normalization also rounds differently. Seeded raw logits allow 1e-6.
+        # Torch and MLX accumulate convolutions differently. Seeded raw logits allow 1e-6.
         np.testing.assert_allclose(
             output, cast(NumericArray, arrays[f"{case}::{suffix}_logits"]), rtol=0, atol=1e-6
         )
@@ -161,10 +140,10 @@ def test_runner_matches_the_original_upstream_pipeline(
     weights = tmp_path / "seeded.safetensors"
     mx.save_safetensors(str(weights), mlx_weights(arrays, mx, f"{suffix}::weight::"))
     result = run(
-        bundle=bundle,
+        bundle=RENAL,
         weights_path=str(weights),
         output_dir=str(tmp_path / "out"),
-        **write_inputs(tmp_path, name, case),
+        **write_inputs(tmp_path, "renal", case),
     )
     written = nib.load(result["outputs"]["mask"])
     # The label map must agree exactly, including class priority and threshold ties.

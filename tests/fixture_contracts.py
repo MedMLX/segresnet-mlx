@@ -91,12 +91,7 @@ class TorchArrays(Protocol):
 from_numpy = cast(TorchArrays, torch).from_numpy
 
 
-class InputPaths(TypedDict, total=False):
+class InputPaths(TypedDict):
     arterial_path: str
     venous_path: str
     excretory_path: str
-    t1c_path: str
-    t1_path: str
-    t2_path: str
-    flair_path: str
-    image_path: str

@@ -1,13 +1,13 @@
-"""NumPy ports of the MONAI 1.6 transforms used by the SegResNet bundles.
+"""NumPy ports of the MONAI 1.6 transforms used by the SegResNet renal CECT bundle.
 
-These functions reproduce the renal CECT, BraTS MRI and whole-body CT bundles'
-``preprocessing`` and ``postprocessing`` without Torch or MONAI: ``LoadImage``
-(nibabel reader), ``Orientation``, ``Spacing`` and its inverse, ``ScaleIntensityRange``,
-``ScaleIntensity``, ``NormalizeIntensity``, ``Activations``, ``AsDiscrete``, the renal
-bundle's ``MergeClassesd`` and the NIfTI writer. Spatial resampling follows MONAI's
-``AffineTransform`` path, that is ``torch.nn.functional.affine_grid`` and trilinear
-``grid_sample`` with border padding and ``align_corners=False``, computed in float64
-as ``Spacing`` does and returned as float32.
+These functions reproduce the bundle's ``preprocessing`` and ``postprocessing``
+without Torch or MONAI: ``LoadImage`` (nibabel reader), ``Orientation``, ``Spacing``
+and its inverse, ``ScaleIntensityRange``, ``Activations(sigmoid=True)``,
+``AsDiscrete(threshold=0.5)``, ``MergeClassesd`` and the NIfTI writer. Spatial
+resampling follows MONAI's ``AffineTransform`` path, that is
+``torch.nn.functional.affine_grid`` and trilinear ``grid_sample`` with border padding
+and ``align_corners=False``, computed in float64 as ``Spacing`` does and returned as
+float32.
 
 Image arrays are channel-first float32 ``(C, *spatial)`` and affines are 4x4 float64
 voxel-to-world matrices as stored in the NIfTI header. Bundle ``pixdim`` targets
@@ -169,16 +169,9 @@ def invert_spacing(
     data: Float32Array,
     affine: Float64Array,
     record: Resampling,
-    mode: str = "bilinear",
 ) -> tuple[Float32Array, Float64Array]:
-    """``SpatialResample.inverse``: resample back to the recorded affine and size.
-
-    ``mode="nearest"`` matches ``Invertd(nearest_interp=True)``, used to invert a
-    discrete label map (e.g. the whole-body bundle's argmax output).
-    """
-    result, new_affine, _ = spatial_resample(
-        data, affine, record.src_affine, record.orig_size, mode
-    )
+    """``SpatialResample.inverse``: resample back to the recorded affine and size."""
+    result, new_affine, _ = spatial_resample(data, affine, record.src_affine, record.orig_size)
     return result, new_affine
 
 
@@ -187,12 +180,8 @@ def spatial_resample(
     src_affine: Float64Array,
     dst_affine: Float64Array,
     spatial_size: Sequence[int],
-    mode: str = "bilinear",
 ) -> tuple[Float32Array, Float64Array, Resampling]:
-    """``monai.transforms.spatial.functional.spatial_resample`` (border, float64).
-
-    ``mode`` is ``"bilinear"`` (trilinear in 3D) or ``"nearest"``.
-    """
+    """``monai.transforms.spatial.functional.spatial_resample``: trilinear, border, float64."""
     rank = min(data.ndim - 1, len(src_affine) - 1, 3, len(spatial_size))
     source = to_affine_nd(rank, src_affine)
     target = to_affine_nd(rank, dst_affine)
@@ -206,7 +195,7 @@ def spatial_resample(
     )
     if unchanged:
         return data.astype(np.float32), np.array(src_affine, dtype=np.float64), record
-    values = _grid_sample(data, xform, in_size, size, mode)
+    values = _grid_sample(data, xform, in_size, size)
     affine = np.array(src_affine, dtype=np.float64)
     new_affine = _mm(affine, to_affine_nd(len(affine) - 1, xform))
     return values, new_affine, record
@@ -228,71 +217,6 @@ def scale_intensity_range(
     result = (data - np.float32(a_min)) / np.float32(a_max - a_min)
     result = result * np.float32(b_max - b_min) + np.float32(b_min)
     return np.clip(result, np.float32(b_min), np.float32(b_max)).astype(np.float32, copy=False)
-
-
-def normalize_intensity_nonzero(data: Float32Array) -> Float32Array:
-    """``NormalizeIntensity(nonzero=True, channel_wise=True)`` on channel-first data.
-
-    Torch takes the float32 sum of the nonzero voxels divided in float32, and the
-    population standard deviation around that mean accumulated in float64. The
-    sums here use NumPy's float64 order, so the statistics can differ from Torch's
-    in the last float32 bit.
-    """
-    result = np.array(data, dtype=np.float32, copy=True)
-    for channel in result:
-        selected = channel != 0
-        if not selected.any():
-            continue
-        masked = channel[selected]
-        total = np.float32(np.sum(masked, dtype=np.float64))
-        mean = np.float32(total / np.float32(masked.size))
-        deviation = masked.astype(np.float64) - np.float64(mean)
-        std = np.float32(np.sqrt(cast(np.float64, np.sum(deviation * deviation)) / masked.size))
-        divisor = np.float32(1.0) if std == 0.0 else std
-        channel[selected] = (masked - mean) / divisor
-    return result
-
-
-def scale_intensity_minmax(data: Float32Array, minv: float, maxv: float) -> Float32Array:
-    """``ScaleIntensity(minv, maxv)``: ``monai.transforms.utils.rescale_array`` in float32."""
-    arr = np.asarray(data, dtype=np.float32)
-    mina = arr.min()
-    maxa = arr.max()
-    if mina == maxa:
-        return (arr * np.float32(minv)).astype(np.float32, copy=False)
-    norm = (arr - mina) / (maxa - mina)
-    return (norm * np.float32(maxv - minv) + np.float32(minv)).astype(np.float32, copy=False)
-
-
-def softmax_channel(data: Float32Array) -> Float32Array:
-    """``Activations(softmax=True)``: ``torch.softmax(img, dim=0)`` in float32."""
-    shifted = data - data.max(axis=0, keepdims=True)
-    exponentiated = np.exp(shifted)
-    return (exponentiated / exponentiated.sum(axis=0, keepdims=True)).astype(
-        np.float32, copy=False
-    )
-
-
-def argmax_channel(data: Float32Array) -> Float32Array:
-    """``AsDiscrete(argmax=True)``: ``torch.argmax(img, dim=0, keepdim=True)`` as float32."""
-    return np.argmax(data, axis=0)[None].astype(np.float32, copy=False)
-
-
-def softmax_argmax_channel(data: Float32Array) -> Float32Array:
-    """Select labels after the existing FP32 softmax in bounded spatial blocks.
-
-    Keep softmax's rounding and lowest-index ties. Gathering coordinates avoids
-    a full logits copy for noncontiguous callers; no probability volume is retained.
-    """
-    shape = data.shape[1:]
-    output = np.empty((1, *shape), dtype=np.float32)
-    labels = output.reshape(-1)
-    for start in range(0, labels.size, 8192):
-        stop = min(start + 8192, labels.size)
-        positions = np.unravel_index(np.arange(start, stop), shape)
-        block = data[(slice(None), *positions)]
-        labels[start:stop] = argmax_channel(softmax_channel(block))[0]
-    return output
 
 
 def sigmoid(data: Float32Array) -> Float32Array:
@@ -340,17 +264,6 @@ def merge_classes(binary: Float32Array) -> Float32Array:
     for channel in weighted[1:]:
         merged = merged + channel * ~((merged != 0) & (channel != 0))
     return merged[None].astype(np.float32, copy=False)
-
-
-def brats_labels(binary: Float32Array | npt.NDArray[np.bool_]) -> npt.NDArray[np.int64]:
-    """BraTS bundle ``Lambdad``: ET (channel 2) -> 4, TC (0) -> 1, WT (1) -> 2.
-
-    ``binary`` is ``(3, *spatial)`` with channels (TC, WT, ET). Returns int64
-    ``(1, *spatial)`` with labels 0, 1, 2 and 4.
-    """
-    return np.where(
-        binary[[2]] > 0, 4, np.where(binary[[0]] > 0, 1, np.where(binary[[1]] > 0, 2, 0))
-    ).astype(np.int64)
 
 
 def write_nifti(path: Path, data: HostArray, affine: Float64Array, dtype: npt.DTypeLike) -> None:
@@ -401,7 +314,6 @@ def _grid_sample(
     xform: Float64Array,
     in_size: Sequence[int],
     out_size: Sequence[int],
-    mode: str = "bilinear",
 ) -> Float32Array:
     """``affine_grid`` then ``grid_sample`` (border, ``align_corners=False``).
 
@@ -410,13 +322,10 @@ def _grid_sample(
     gives the same values without a float64 copy of the whole image.
     The grid's four-term dot products follow the reference Torch build's MKL order,
     ``fma(z, t2, x * t0) + fma(1, t3, y * t1)``; with zeros off the diagonal every
-    order gives the same coordinates. ``mode="nearest"`` matches
-    ``grid_sample(mode="nearest")``: the single closest voxel, rounded to even.
+    order gives the same coordinates.
     """
     if len(in_size) != 3:
         raise ValueError("SegResNet bundle resampling is three-dimensional")
-    if mode not in ("bilinear", "nearest"):
-        raise ValueError(f"Unsupported grid_sample mode: {mode}")
     theta = _theta(xform, in_size, out_size)
     depth, height, width = (int(size) for size in out_size)
     # Base grid: x follows the last data axis, z the first.
@@ -431,20 +340,18 @@ def _grid_sample(
     )
     result = np.empty((data.shape[0], depth, height, width), dtype=np.float32)
     step = max(1, _CHUNK_VOXELS // max(1, height * width * data.shape[0]))
-    separable_fn = _sample_separable if mode == "bilinear" else _sample_separable_nearest
-    general_fn = _sample if mode == "bilinear" else _sample_nearest
     for start in range(0, depth, step):
         stop = min(depth, start + step)
         if separable:
             gx = zx[0][0] + ys[0][0]
             gy = zx[1][0, 0] + ys[1]
             gz = zx[2][start:stop, 0] + ys[2][0]
-            result[:, start:stop] = separable_fn(data, gx, gy, gz)
+            result[:, start:stop] = _sample_separable(data, gx, gy, gz)
         else:
             coordinates = [
                 zx[row][start:stop, None, :] + ys[row][None, :, None] for row in range(3)
             ]
-            result[:, start:stop] = general_fn(data, *coordinates)
+            result[:, start:stop] = _sample(data, *coordinates)
     return result
 
 
@@ -465,9 +372,7 @@ def _fma_array(
     return total + (sum_error + error)
 
 
-def _product_error(
-    left: Float64Array, right: Float64Array, product: Float64Array
-) -> Float64Array:
+def _product_error(left: Float64Array, right: Float64Array, product: Float64Array) -> Float64Array:
     """Dekker's exact remainder ``left * right - product``."""
 
     def split[T: (Float64Array, np.float64)](value: T) -> tuple[T, T]:
@@ -575,37 +480,3 @@ def _sample(
         ].astype(np.float64)
         result = np.where(inside, _fma_array(values, weight, result), result)
     return result
-
-
-def _nearest_index(coordinate: Float64Array, size: int) -> Int64Array:
-    """``nearbyint`` of the border-clamped source index: round half to even."""
-    return np.rint(_source_index(coordinate, size)).astype(np.int64)
-
-
-def _sample_separable_nearest(
-    data: Float32Array,
-    gx: Float64Array,
-    gy: Float64Array,
-    gz: Float64Array,
-) -> Float64Array:
-    """Nearest-voxel pick for an axis-aligned grid: one index per axis."""
-    depth, height, width = data.shape[1:]
-    x_index = _nearest_index(gx, width)
-    y_index = _nearest_index(gy, height)
-    z_index = _nearest_index(gz, depth)
-    return data.take(z_index, axis=1).take(y_index, axis=2).take(x_index, axis=3).astype(
-        np.float64
-    )
-
-
-def _sample_nearest(
-    data: Float32Array,
-    gx: Float64Array,
-    gy: Float64Array,
-    gz: Float64Array,
-) -> Float64Array:
-    """Nearest-voxel pick for a general grid: one (z, y, x) index per output site."""
-    x_index = _nearest_index(gx, data.shape[3])
-    y_index = _nearest_index(gy, data.shape[2])
-    z_index = _nearest_index(gz, data.shape[1])
-    return data[:, z_index, y_index, x_index].astype(np.float64)

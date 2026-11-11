@@ -12,26 +12,11 @@ from segresnet_mlx.predictor import BUNDLE_CONFIGS, SlidingWindowConfig
 
 def test_bundle_contracts_follow_upstream_settings() -> None:
     """Compare bundle topology and inferer settings with recorded configs."""
-    # wholeBody_ct_segmentation shares one committed inference.json between the
-    # highres and lowres bundles; its sw_batch_size/overlap resolve through
-    # `displayable_configs` rather than appearing as literal inferer values.
-    resolved_elsewhere = {"wholeBody_ct_segmentation", "wholeBody_ct_segmentation_lowres"}
     for name, config in BUNDLES.items():
-        document = "wholeBody_ct_segmentation" if name in resolved_elsewhere else name
-        recorded = json.loads(
-            (ROOT / "tests/fixtures/bundle_configs" / f"{document}.json").read_text()
-        )
-        if name not in resolved_elsewhere:
-            assert BUNDLE_CONFIGS[name] == SlidingWindowConfig.from_bundle_config(recorded)
-            assert config.sw_batch_size == recorded["inferer"]["sw_batch_size"]
-            assert config.overlap == recorded["inferer"]["overlap"]
-        else:
-            assert recorded["inferer"]["sw_batch_size"] == "@displayable_configs#sw_batch_size"
-            assert recorded["inferer"]["overlap"] == "@displayable_configs#sw_overlap"
-            # Pinned displayable_configs default (same inference.json revision):
-            # highres=true, sw_overlap=0.25, sw_batch_size=1.
-            assert config.sw_batch_size == 1
-            assert config.overlap == 0.25
+        recorded = json.loads((ROOT / "tests/fixtures/bundle_configs" / f"{name}.json").read_text())
+        assert BUNDLE_CONFIGS[name] == SlidingWindowConfig.from_bundle_config(recorded)
+        assert config.sw_batch_size == recorded["inferer"]["sw_batch_size"]
+        assert config.overlap == recorded["inferer"]["overlap"]
         assert config.mode == recorded["inferer"].get("mode", "constant")
         assert config.padding_mode == recorded["inferer"].get("padding_mode", "constant")
         definition = recorded["network_def"]

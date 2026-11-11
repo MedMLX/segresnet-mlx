@@ -52,8 +52,11 @@ def _restore_parameters(path: Path, arrays: Arrays, metadata: Metadata) -> None:
     """Rebuild the recorded inputs to MONAI from their seeds and topology."""
     name = path.stem
     kind = metadata.get("kind")
-    if not (name.startswith("segresnet_") or kind in ("decoder_network", "no_decoder_network")
-            or (name.startswith("medmlx_") and "runner::spec" in arrays)):
+    if not (
+        name.startswith("segresnet_")
+        or kind in ("decoder_network", "no_decoder_network")
+        or (name.startswith("medmlx_") and "runner::spec" in arrays)
+    ):
         return
     from reference_contracts import Spec, seeded_network
 
@@ -112,14 +115,6 @@ def mlx_weights(
 
 BUNDLE_INPUT_KEYS = {
     "renal": {"arterial_path": "artery", "venous_path": "vein", "excretory_path": "excret"},
-    "brats": {
-        "t1c_path": "channel0",
-        "t1_path": "channel1",
-        "t2_path": "channel2",
-        "flair_path": "channel3",
-    },
-    "wholebody": {"image_path": "ct"},
-    "wholebody_lowres": {"image_path": "ct"},
 }
 
 

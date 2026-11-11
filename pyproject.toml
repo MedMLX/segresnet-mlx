@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "segresnet-mlx"
 version = "0.3.6"
-description = "Segment brain tumors, renal structures and whole-body CT anatomy with MONAI SegResNet models in native MLX"
+description = "Segment renal arteries, veins, ureters, tumors and parenchyma in multiphase CT with MONAI SegResNet in native MLX"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 classifiers = [
@@ -28,9 +28,8 @@ keywords = [
   "segresnet",
   "monai",
   "segmentation",
-  "brats",
   "ct",
-  "mri",
+  "kidney",
 ]
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
@@ -46,7 +45,6 @@ dependencies = [
 ]
 
 [project.entry-points."medmlx.models"]
-segresnet-brats = "segresnet_mlx.medmlx:BRATS_MODEL"
 segresnet-renal-cect = "segresnet_mlx.medmlx:RENAL_CECT_MODEL"
 
 [project.urls]

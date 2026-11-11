@@ -2,28 +2,25 @@
 
 # segresnet-mlx
 
-Segment brain tumors, renal structures and whole-body CT anatomy with MONAI SegResNet models in native MLX.
+Segment renal arteries, veins, ureters, tumors and parenchyma in multiphase CT with MONAI SegResNet and native MLX.
 
 [![PyPI](https://img.shields.io/pypi/v/segresnet-mlx)](https://pypi.org/project/segresnet-mlx/)
 [![Python](https://img.shields.io/pypi/pyversions/segresnet-mlx)](https://pypi.org/project/segresnet-mlx/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue)](https://github.com/MedMLX/segresnet-mlx/blob/v0.3.6/LICENSE)
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-MLX-black?logo=apple)](https://github.com/ml-explore/mlx)
-[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97_Hugging_Face-weights-yellow)](https://huggingface.co/MedMLX/segresnet-brats-mlx)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97_Hugging_Face-weights-yellow)](https://huggingface.co/MedMLX/segresnet-renal-cect-mlx)
 [![MedMLX](https://img.shields.io/badge/MedMLX-runtime-A51C30)](https://github.com/MedMLX/medmlx)
 
-[BraTS weights](https://huggingface.co/MedMLX/segresnet-brats-mlx) · [Renal weights](https://huggingface.co/MedMLX/segresnet-renal-cect-mlx) · [MedMLX](https://github.com/MedMLX/medmlx)
-
-<img src="https://raw.githubusercontent.com/MedMLX/segresnet-mlx/main/docs/example.png" alt="Brain tumor segmentation in axial, coronal and sagittal MRI" width="100%">
+[Weights](https://huggingface.co/MedMLX/segresnet-renal-cect-mlx) · [Upstream bundle](https://github.com/Project-MONAI/model-zoo/tree/dev/models/renalStructures_CECT_segmentation) · [MedMLX](https://github.com/MedMLX/medmlx)
 
 </div>
 
 | Input | Output |
 | :--- | :--- |
-| MRI sequences or CT volumes | Segmentation on the input grid |
+| Arterial, venous and excretory CT · NIfTI | Renal labels on the input grid |
 
 | Model | Weights download | Peak MLX memory | Measured on |
 | :--- | ---: | ---: | :--- |
-| `segresnet-brats` | 19 MB | 4.9 GB | 240×240×155 four-sequence brain MRI |
 | `segresnet-renal-cect` | 76 MB | 4.0 GB | 478×277×161 three-phase CT |
 
 ## Install
@@ -37,103 +34,53 @@ uv pip install "segresnet-mlx>=0.3.6"
 ## Run
 
 ```python
-from segresnet_mlx.medmlx import brats
+from segresnet_mlx.medmlx import renal_cect
 
-result = brats(
-    t1c_path="t1c.nii.gz", t1_path="t1.nii.gz", t2_path="t2.nii.gz",
-    flair_path="flair.nii.gz", output_dir="out",
+result = renal_cect(
+    arterial_path="arterial.nii.gz",
+    venous_path="venous.nii.gz",
+    excretory_path="excretory.nii.gz",
+    output_dir="out",
 )
 print(result["outputs"]["mask"])
 ```
 
-### Models and weights
-
-Each runner selects its bundle internally. Keep each model's input volumes on one voxel
-grid.
-
-| Model | Runner | Inputs | Weights | Local file |
-| :--- | :--- | :--- | :--- | :--- |
-| `segresnet-brats` | `brats` | `t1c_path`, `t1_path`, `t2_path`, `flair_path` | `MedMLX/segresnet-brats-mlx` | `segresnet-brats.safetensors` |
-| `segresnet-renal-cect` | `renal_cect` | `arterial_path`, `venous_path`, `excretory_path` | [`MedMLX/segresnet-renal-cect-mlx`](https://huggingface.co/MedMLX/segresnet-renal-cect-mlx) | `segresnet-renal-cect.safetensors` |
-
-Weights download on first use; `medmlx setup segresnet-brats` downloads ahead of time.
-For local weights, pass a folder containing the model's local file as `weights_path`.
-The standalone `run(bundle=..., weights_path=...)` interface remains available for
-explicit local checkpoints, including the whole-body CT variants, whose native weights
-are published as [`MedMLX/segresnet-wholebody-mlx`](https://huggingface.co/MedMLX/segresnet-wholebody-mlx).
+Weights download from [`MedMLX/segresnet-renal-cect-mlx`](https://huggingface.co/MedMLX/segresnet-renal-cect-mlx)
+on first use; `medmlx setup segresnet-renal-cect` downloads ahead of time. For local
+weights, pass `weights_path` as a folder containing `segresnet-renal-cect.safetensors`
+or as the file itself.
 
 ### Inputs and outputs
 
 | Argument | Meaning |
 | --- | --- |
-| `t1c_path`, `t1_path`, `t2_path`, `flair_path` | `brats`: contrast T1, T1, T2 and FLAIR MRI in NIfTI |
-| `arterial_path`, `venous_path`, `excretory_path` | `renal_cect`: arterial, venous and excretory CT in NIfTI |
-| `output_dir` | Directory for `<bundle>_mask.nii.gz`; created if missing |
+| `arterial_path`, `venous_path`, `excretory_path` | Arterial, venous and excretory CT in NIfTI, on one voxel grid |
+| `output_dir` | Directory for `renalStructures_CECT_segmentation_mask.nii.gz`; created if missing |
 | `weights_path` | Optional `.safetensors` file or a folder containing it |
 | `overwrite` | `False` by default; an existing mask is replaced only when `True` |
-| `arithmetic_profile` | `torch-order-fp32` (default), `compensated-fp32` or `compensated-fp48` (renal only) |
+| `arithmetic_profile` | `torch-order-fp32` (default), `compensated-fp32` or `compensated-fp48` |
+| `streaming` | `False` by default; `True` keeps blending intermediates and logits in temporary mapped files |
+| `scratch_dir` | Parent directory for the streaming files; defaults to the system temporary directory |
 
 Inputs are finite 3D volumes on one voxel grid, with spatial units in millimetres or
 unspecified. The mask is written on the input grid as the NIfTI reader corrects it.
 
-| Model | Mask dtype | Labels |
-| :--- | :--- | :--- |
-| `segresnet-brats` | uint8 | 1 necrotic/non-enhancing tumor core, 2 peritumoral edema, 4 enhancing tumor |
-| `segresnet-renal-cect` | float32 | 1 artery, 2 vein, 3 ureter, 4 neoplasm, 5 parenchyma |
+The mask is float32 with labels 1 artery, 2 vein, 3 ureter, 4 neoplasm and
+5 parenchyma; where classes overlap, the lower label wins.
 
 | `arithmetic_profile` | Arithmetic |
 | :--- | :--- |
 | `torch-order-fp32` (default) | The default float32 profile |
 | `compensated-fp32` | Convolution and GroupNorm accumulate in paired Metal floats, with float32 layer outputs |
-| `compensated-fp48` | The pairs carry through the hidden layers and stitching runs in float64 on the host; needs the renal transposed-convolution decoder (renal only) |
+| `compensated-fp48` | The pairs carry through the hidden layers and stitching runs in float64 on the host |
 
-`run` returns `{"outputs": {"mask": path}, "details": {...}}`, with run metadata in `details`.
+The runner returns `{"outputs": {"mask": path}, "details": {...}}`, with run metadata in `details`.
 Invalid inputs raise `InvalidInputError`; missing or mismatched weights raise
 `AssetNotReadyError`; inference failures raise `ModelExecutionError`.
 
-### Whole-body CT and streaming
-
-`run` takes `bundle` and a `.safetensors` file as `weights_path`:
-
-| `bundle` | Weights file | Input |
-| :--- | :--- | :--- |
-| `brats_mri_segmentation` | `segresnet-brats.safetensors` | Four MRI sequences |
-| `renalStructures_CECT_segmentation` | `segresnet-renal-cect.safetensors` | Three CT phases |
-| `wholeBody_ct_segmentation` (1.5 mm) | `segresnet-wholebody-high.safetensors` | One CT as `image_path` |
-| `wholeBody_ct_segmentation_lowres` (3 mm) | `segresnet-wholebody-low.safetensors` | One CT as `image_path` |
-
-The whole-body bundles write float32 labels 0–104 from the bundle's `channel_def`:
-
-| Labels | Structures |
-| :--- | :--- |
-| 1–10 | spleen, kidney_right, kidney_left, gallbladder, liver, stomach, aorta, inferior_vena_cava, portal_vein_and_splenic_vein, pancreas |
-| 11–12 | adrenal glands (right, left) |
-| 13–17 | lung lobes (upper and lower left, upper, middle and lower right) |
-| 18–41 | vertebrae L5–C1 |
-| 42–43 | esophagus, trachea |
-| 44–49 | heart chambers and pulmonary artery |
-| 50 | brain |
-| 51–54 | iliac arteries and veins |
-| 55 | small bowel |
-| 56 | duodenum |
-| 57 | colon |
-| 58–69 | left ribs 1–12 |
-| 70–81 | right ribs 1–12 |
-| 82–83 | humerus |
-| 84–85 | scapula |
-| 86–87 | clavicula |
-| 88–89 | femur |
-| 90–91 | hip |
-| 92–93 | sacrum, face |
-| 94–99 | gluteus maximus, medius and minimus |
-| 100–101 | autochthon |
-| 102–103 | iliopsoas |
-| 104 | urinary bladder |
-
-`run(..., streaming=True, scratch_dir="scratch")` keeps blending intermediates and
-logits in temporary mapped files instead of a full in-memory class volume. The files
-are removed on success and failure; `scratch_dir` defaults to the system temporary
-directory. The final label volume stays in memory.
+Streaming files are removed on success and failure. The final label volume stays in
+memory. `run(bundle="renalStructures_CECT_segmentation", weights_path=...)` takes the
+same inputs with an explicit `.safetensors` file.
 
 ### Python API
 
@@ -161,7 +108,7 @@ volume_logits = predict_logits(patch, config, network=network)  # stitched slidi
 
 ## Use with MedMLX
 
-Use the [MedMLX MCP server](https://github.com/MedMLX/medmlx/blob/main/docs/mcp.md) to run `segresnet-brats` and `segresnet-renal-cect` from an MCP client. Weights download on first use.
+Use the [MedMLX MCP server](https://github.com/MedMLX/medmlx/blob/main/docs/mcp.md) to run `segresnet-renal-cect` from an MCP client. Weights download on first use.
 
 ```sh
 uv tool install --python 3.13 "medmlx[segment,mcp]"
@@ -170,7 +117,7 @@ mkdir -p "$HOME/medmlx-work"
 claude mcp add --scope user medmlx -- "$MEDMLX" serve --root "$HOME/medmlx-work"
 ```
 
-For Codex, use `codex mcp add medmlx -- "$MEDMLX" serve --root "$HOME/medmlx-work"`. Other MCP clients take the same command and arguments. The same install provides the `medmlx` CLI, for example `medmlx describe segresnet-brats`.
+For Codex, use `codex mcp add medmlx -- "$MEDMLX" serve --root "$HOME/medmlx-work"`. Other MCP clients take the same command and arguments. The same install provides the `medmlx` CLI, for example `medmlx describe segresnet-renal-cect`.
 
 > **For AI agents:** prefer the MedMLX MCP tools (`list_models`, `describe_model`, `model_readiness`, `run_model`, `get_job`) over writing Python against this package.
 

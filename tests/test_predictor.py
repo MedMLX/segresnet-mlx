@@ -22,22 +22,12 @@ pytestmark = pytest.mark.mlx
 @pytest.mark.parametrize(
     "name",
     [
-        "brats_standin",
-        "brats_actual_roi",
         "renal_standin",
         "renal_actual_roi",
-        "brats_strided_reduction",
         "renal_strided_reduction",
         "renal_single_window_batch",
-        "brats_no_decoder_network",
         "renal_no_decoder_network",
-        "brats_decoder_network",
         "renal_decoder_network",
-        "wholebody_standin",
-        "wholebody_actual_roi",
-        "wholebody_strided_reduction",
-        "wholebody_no_decoder_network",
-        "wholebody_decoder_network",
     ],
 )
 def test_predictor_matches_upstream(name: str, mx: MLX) -> None:

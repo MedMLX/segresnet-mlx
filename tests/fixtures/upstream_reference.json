@@ -8,8 +8,6 @@
   "model_zoo_revision": "db9eeeef7ba64ce2ced0230d9bd4c524f69b7f0c",
   "files": [
     "renalStructures_CECT_segmentation/configs/inference.json",
-    "renalStructures_CECT_segmentation/scripts/my_transforms.py",
-    "brats_mri_segmentation/configs/inference.json",
-    "wholeBody_ct_segmentation/configs/inference.json"
+    "renalStructures_CECT_segmentation/scripts/my_transforms.py"
   ]
 }

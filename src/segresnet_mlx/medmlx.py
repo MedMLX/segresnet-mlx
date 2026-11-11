@@ -1,4 +1,4 @@
-"""medmlx declaration and runner for the original MONAI SegResNet bundles."""
+"""medmlx declaration and runner for the MONAI SegResNet renal CECT bundle."""
 
 from __future__ import annotations
 
@@ -30,116 +30,6 @@ from medmlx_core.weights import weights_dir, weights_revision
 from segresnet_mlx import transforms
 from segresnet_mlx.topology import ArithmeticProfile, SegResNetSpec
 
-# Label values of the 104 TotalSegmentator structures plus background, as listed in the
-# whole-body bundle's metadata.json ``channel_def``.
-_WHOLE_BODY_LABELS: Mapping[int, str] = {
-    0: "background",
-    1: "spleen",
-    2: "kidney_right",
-    3: "kidney_left",
-    4: "gallbladder",
-    5: "liver",
-    6: "stomach",
-    7: "aorta",
-    8: "inferior_vena_cava",
-    9: "portal_vein_and_splenic_vein",
-    10: "pancreas",
-    11: "adrenal_gland_right",
-    12: "adrenal_gland_left",
-    13: "lung_upper_lobe_left",
-    14: "lung_lower_lobe_left",
-    15: "lung_upper_lobe_right",
-    16: "lung_middle_lobe_right",
-    17: "lung_lower_lobe_right",
-    18: "vertebrae_L5",
-    19: "vertebrae_L4",
-    20: "vertebrae_L3",
-    21: "vertebrae_L2",
-    22: "vertebrae_L1",
-    23: "vertebrae_T12",
-    24: "vertebrae_T11",
-    25: "vertebrae_T10",
-    26: "vertebrae_T9",
-    27: "vertebrae_T8",
-    28: "vertebrae_T7",
-    29: "vertebrae_T6",
-    30: "vertebrae_T5",
-    31: "vertebrae_T4",
-    32: "vertebrae_T3",
-    33: "vertebrae_T2",
-    34: "vertebrae_T1",
-    35: "vertebrae_C7",
-    36: "vertebrae_C6",
-    37: "vertebrae_C5",
-    38: "vertebrae_C4",
-    39: "vertebrae_C3",
-    40: "vertebrae_C2",
-    41: "vertebrae_C1",
-    42: "esophagus",
-    43: "trachea",
-    44: "heart_myocardium",
-    45: "heart_atrium_left",
-    46: "heart_ventricle_left",
-    47: "heart_atrium_right",
-    48: "heart_ventricle_right",
-    49: "pulmonary_artery",
-    50: "brain",
-    51: "iliac_artery_left",
-    52: "iliac_artery_right",
-    53: "iliac_vena_left",
-    54: "iliac_vena_right",
-    55: "small_bowel",
-    56: "duodenum",
-    57: "colon",
-    58: "rib_left_1",
-    59: "rib_left_2",
-    60: "rib_left_3",
-    61: "rib_left_4",
-    62: "rib_left_5",
-    63: "rib_left_6",
-    64: "rib_left_7",
-    65: "rib_left_8",
-    66: "rib_left_9",
-    67: "rib_left_10",
-    68: "rib_left_11",
-    69: "rib_left_12",
-    70: "rib_right_1",
-    71: "rib_right_2",
-    72: "rib_right_3",
-    73: "rib_right_4",
-    74: "rib_right_5",
-    75: "rib_right_6",
-    76: "rib_right_7",
-    77: "rib_right_8",
-    78: "rib_right_9",
-    79: "rib_right_10",
-    80: "rib_right_11",
-    81: "rib_right_12",
-    82: "humerus_left",
-    83: "humerus_right",
-    84: "scapula_left",
-    85: "scapula_right",
-    86: "clavicula_left",
-    87: "clavicula_right",
-    88: "femur_left",
-    89: "femur_right",
-    90: "hip_left",
-    91: "hip_right",
-    92: "sacrum",
-    93: "face",
-    94: "gluteus_maximus_left",
-    95: "gluteus_maximus_right",
-    96: "gluteus_medius_left",
-    97: "gluteus_medius_right",
-    98: "gluteus_minimus_left",
-    99: "gluteus_minimus_right",
-    100: "autochthon_left",
-    101: "autochthon_right",
-    102: "iliopsoas_left",
-    103: "iliopsoas_right",
-    104: "urinary_bladder",
-}
-
 
 @dataclass(frozen=True, slots=True)
 class Bundle:
@@ -162,9 +52,8 @@ class Bundle:
     padding_mode: str = "constant"
 
 
-# Every bundle uses the MONAI SegResNet defaults for blocks_down (1, 2, 2, 4),
-# blocks_up (1, 1, 1), group norm with 8 groups and eps 1e-5. They differ in channel
-# counts, init_filters and (renal only) deconv instead of nontrainable upsampling.
+# The renal bundle uses the MONAI SegResNet defaults for blocks_down (1, 2, 2, 4),
+# blocks_up (1, 1, 1), group norm with 8 groups and eps 1e-5, with deconv upsampling.
 BUNDLES: dict[str, Bundle] = {
     "renalStructures_CECT_segmentation": Bundle(
         spec=SegResNetSpec(3, 6, 32, upsample_mode="deconv"),
@@ -182,57 +71,8 @@ BUNDLES: dict[str, Bundle] = {
         },
         output_dtype="float32",
     ),
-    "brats_mri_segmentation": Bundle(
-        spec=SegResNetSpec(4, 3, 16),
-        roi_size=(240, 240, 160),
-        sw_batch_size=1,
-        overlap=0.5,
-        roles=("t1c_path", "t1_path", "t2_path", "flair_path"),
-        labels={
-            0: "background",
-            1: "necrotic/non-enhancing tumor core",
-            2: "peritumoral edema",
-            4: "enhancing tumor",
-        },
-        output_dtype="uint8",
-    ),
-    "wholeBody_ct_segmentation": Bundle(
-        spec=SegResNetSpec(1, 105, 32),
-        roi_size=(96, 96, 96),
-        sw_batch_size=1,
-        overlap=0.25,
-        roles=("image_path",),
-        labels=_WHOLE_BODY_LABELS,
-        output_dtype="float32",
-        mode="gaussian",
-        padding_mode="replicate",
-    ),
-    "wholeBody_ct_segmentation_lowres": Bundle(
-        spec=SegResNetSpec(1, 105, 32),
-        roi_size=(96, 96, 96),
-        sw_batch_size=1,
-        overlap=0.25,
-        roles=("image_path",),
-        labels=_WHOLE_BODY_LABELS,
-        output_dtype="float32",
-        mode="gaussian",
-        padding_mode="replicate",
-    ),
 }
 
-BRATS_MODEL = {
-    "id": "segresnet-brats",
-    "label": "SegResNet BraTS MRI",
-    "task": "segmentation",
-    "run": "segresnet_mlx.medmlx:brats",
-    # Measured MLX peak for a 240x240x155 four-sequence MRI; larger inputs need more.
-    "peak_memory_gb": 5.0,
-    "summary": "BraTS brain tumor segmentation from co-registered MRI sequences.",
-    "labels": {
-        str(value): name
-        for value, name in BUNDLES["brats_mri_segmentation"].labels.items()
-    },
-}
 RENAL_CECT_MODEL = {
     "id": "segresnet-renal-cect",
     "label": "SegResNet renal CECT",
@@ -247,16 +87,8 @@ RENAL_CECT_MODEL = {
     },
 }
 
-_ROLES = tuple(dict.fromkeys(role for bundle in BUNDLES.values() for role in bundle.roles))
 # The renal bundle's Spacingd pixdim, in mm.
 _RENAL_SPACING = (0.8, 0.8, 0.8)
-# wholeBody_ct_segmentation's `displayable_configs#highres` toggle: true selects
-# 1.5 mm (models/model.pt), false selects 3 mm (models/model_lowres.pt). Both share
-# one network and inferer; only the resampling target and checkpoint differ.
-_WHOLE_BODY_PIXDIM = {
-    "wholeBody_ct_segmentation": (1.5, 1.5, 1.5),
-    "wholeBody_ct_segmentation_lowres": (3.0, 3.0, 3.0),
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,11 +127,6 @@ def run(
     arterial_path: str | None = None,
     venous_path: str | None = None,
     excretory_path: str | None = None,
-    t1c_path: str | None = None,
-    t1_path: str | None = None,
-    t2_path: str | None = None,
-    flair_path: str | None = None,
-    image_path: str | None = None,
     overwrite: bool = False,
     arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
     streaming: bool = False,
@@ -307,22 +134,15 @@ def run(
 ) -> RunResult:
     """Segment one case with a MONAI SegResNet bundle and write the label map.
 
-    ``bundle`` is ``renalStructures_CECT_segmentation`` (``arterial_path``,
-    ``venous_path``, ``excretory_path``: co-registered CT phases on one grid),
-    ``brats_mri_segmentation`` (``t1c_path``, ``t1_path``, ``t2_path``,
-    ``flair_path``: co-registered MRI on one grid), or ``wholeBody_ct_segmentation``
-    / ``wholeBody_ct_segmentation_lowres`` (``image_path``: one CT volume, segmented
-    at 1.5 mm or 3 mm respectively). ``weights_path`` is a native ``.safetensors``
-    file: ``segresnet-brats.safetensors`` from ``MedMLX/segresnet-brats-mlx`` for
-    BraTS, or ``segresnet-renal-cect.safetensors`` from
-    ``MedMLX/segresnet-renal-cect-mlx`` for renal CECT, or the corresponding
-    high- or low-resolution file from ``MedMLX/segresnet-wholebody-mlx``.
+    ``bundle`` is ``renalStructures_CECT_segmentation``, which takes
+    ``arterial_path``, ``venous_path`` and ``excretory_path``: co-registered CT
+    phases on one grid. ``weights_path`` is the native
+    ``segresnet-renal-cect.safetensors`` file from ``MedMLX/segresnet-renal-cect-mlx``.
 
-    Inputs must be finite 3D NIfTI volumes; multi-input bundles need identical shape
-    and affine (atol 1e-5). Writes ``<bundle>_mask.nii.gz`` in ``output_dir`` on the
-    first input's shape and reader-selected affine (see ``Volume``): renal labels 0-5
-    and whole-body labels 0-104 as float32, BraTS labels 0, 1, 2, 4 as uint8, as the
-    bundles' ``SaveImaged`` wrote them. An existing mask is replaced only when
+    Inputs must be finite 3D NIfTI volumes with identical shape and affine
+    (atol 1e-5). Writes ``<bundle>_mask.nii.gz`` in ``output_dir`` on the first
+    input's shape and reader-selected affine (see ``Volume``): float32 labels 0-5,
+    as the bundle's ``SaveImaged`` wrote them. An existing mask is replaced only when
     ``overwrite`` is true; output aliases of input images are refused by a
     preflight check. Every argument is checked before weights or inputs are loaded.
     The NIfTI spatial-unit field must be mm or unspecified (then assumed mm); other
@@ -334,30 +154,21 @@ def run(
     Its source comparison uses float64 internal accumulators and float32
     outputs. The default retains the existing Torch-order FP32 arithmetic.
     ``compensated-fp48`` carries both words through the hidden layers and uses
-    float64 host stitching before one float32 logits export. This profile
-    requires transpose-convolution upsampling and compares with the unchanged
-    original graph evaluated in float64 throughout its network and inferer.
+    float64 host stitching before one float32 logits export. It compares with the
+    unchanged original graph evaluated in float64 throughout its network and inferer.
 
     Args:
-        bundle: ``brats_mri_segmentation``, ``renalStructures_CECT_segmentation``,
-            ``wholeBody_ct_segmentation`` or ``wholeBody_ct_segmentation_lowres``.
-        weights_path: Path to the matching native ``.safetensors`` file, such as
-            ``segresnet-brats.safetensors`` or ``segresnet-renal-cect.safetensors``.
-            Hugging Face cache file paths are accepted; directories and Torch ``.pt``
-            checkpoints are not.
+        bundle: ``renalStructures_CECT_segmentation``.
+        weights_path: Path to ``segresnet-renal-cect.safetensors``. Hugging Face
+            cache file paths are accepted; directories and Torch ``.pt`` checkpoints
+            are not.
         output_dir: Directory for ``<bundle>_mask.nii.gz``; created if missing.
-        arterial_path: Renal arterial-phase 3D NIfTI; required for the renal bundle.
-        venous_path: Renal venous-phase 3D NIfTI on the arterial grid; required for renal.
-        excretory_path: Renal excretory-phase 3D NIfTI on the arterial grid; required
-            for renal.
-        t1c_path: BraTS contrast-enhanced T1 3D NIfTI; required for BraTS.
-        t1_path: BraTS T1 3D NIfTI on the T1c grid; required for BraTS.
-        t2_path: BraTS T2 3D NIfTI on the T1c grid; required for BraTS.
-        flair_path: BraTS FLAIR 3D NIfTI on the T1c grid; required for BraTS.
-        image_path: Single 3D CT NIfTI; required for either whole-body bundle.
+        arterial_path: Arterial-phase 3D CT NIfTI; required.
+        venous_path: Venous-phase 3D CT NIfTI on the arterial grid; required.
+        excretory_path: Excretory-phase 3D CT NIfTI on the arterial grid; required.
         overwrite: Replace an existing output mask when true; defaults to false.
         arithmetic_profile: ``torch-order-fp32`` (default), ``compensated-fp32``,
-            or ``compensated-fp48``; the last supports only the renal bundle.
+            or ``compensated-fp48``.
         streaming: Use bounded blending intermediates and temporary mapped logits.
             The final label volume remains resident; defaults to False.
         scratch_dir: Parent directory for temporary maps when streaming is enabled;
@@ -369,10 +180,10 @@ def run(
         ``requires_human_review`` set to true.
 
     Raises:
-        InvalidInputError: Unknown bundle or profile, missing, absent or inapplicable
-            input paths, ``overwrite`` or ``streaming`` not a bool, ``output_dir`` not a
-            directory, an existing output without ``overwrite``, or an unreadable,
-            non-3D, non-finite, non-mm or mismatched-grid NIfTI input.
+        InvalidInputError: Unknown bundle or profile, missing or absent input paths,
+            ``overwrite`` or ``streaming`` not a bool, ``output_dir`` not a directory,
+            an existing output without ``overwrite``, or an unreadable, non-3D,
+            non-finite, non-mm or mismatched-grid NIfTI input.
         AssetNotReadyError: The weights file is missing, not ``.safetensors``, or
             does not match the bundle's network.
         ModelExecutionError: Inference failed or produced a mask off the source grid
@@ -382,11 +193,6 @@ def run(
         "arterial_path": arterial_path,
         "venous_path": venous_path,
         "excretory_path": excretory_path,
-        "t1c_path": t1c_path,
-        "t1_path": t1_path,
-        "t2_path": t2_path,
-        "flair_path": flair_path,
-        "image_path": image_path,
     }
     config, mask_path = _check_arguments(
         bundle,
@@ -403,12 +209,7 @@ def run(
     volumes = load_inputs([(role, values[role]) for role in config.roles])
     network = _load_network(weights, config.spec, arithmetic_profile=arithmetic_profile)
     loaded = time.perf_counter()
-    if bundle == "renalStructures_CECT_segmentation":
-        image, inverse = preprocess_renal(volumes)
-    elif bundle in _WHOLE_BODY_PIXDIM:
-        image, inverse = preprocess_wholebody(volumes, _WHOLE_BODY_PIXDIM[bundle])
-    else:
-        image, inverse = preprocess_brats(volumes), None
+    image, inverse = preprocess_renal(volumes)
     prepared = time.perf_counter()
     if streaming:
         from medmlx_core.volume_workspace import VolumeWorkspace
@@ -423,16 +224,11 @@ def run(
             else predict(network, image, config, workspace=workspace)
         )
         predicted = time.perf_counter()
-        if workspace is not None:
-            mask = postprocess_streaming(logits[0], inverse, bundle, workspace)
-        elif bundle == "renalStructures_CECT_segmentation":
-            assert inverse is not None
-            mask = postprocess_renal(logits[0], inverse)
-        elif bundle in _WHOLE_BODY_PIXDIM:
-            assert inverse is not None
-            mask = postprocess_wholebody(logits[0], inverse)
-        else:
-            mask = postprocess_brats(logits[0])
+        mask = (
+            postprocess_renal(logits[0], inverse)
+            if workspace is None
+            else postprocess_streaming(logits[0], inverse)
+        )
     _validate_mask(mask, volumes[0], config)
     output_root.mkdir(parents=True, exist_ok=True)
     write_atomic(mask_path, mask, volumes[0].affine, config.output_dtype)
@@ -468,68 +264,6 @@ def run(
             "requires_human_review": True,
         },
     }
-
-
-def brats(
-    *,
-    t1c_path: str,
-    t1_path: str,
-    t2_path: str,
-    flair_path: str,
-    output_dir: str,
-    weights_path: str | None = None,
-    overwrite: bool = False,
-    arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
-    streaming: bool = False,
-    scratch_dir: str | None = None,
-) -> RunResult:
-    """Segment BraTS MRI; omit weights_path to download its cached model folder.
-
-    The four input volumes must share a voxel grid. An explicit folder contains
-    ``segresnet-brats.safetensors``; an explicit safetensors file is also accepted.
-    Automatic downloads use ``MedMLX/segresnet-brats-mlx``. All arithmetic and
-    preprocessing are delegated unchanged to ``run``.
-
-    Args:
-        t1c_path: Contrast-enhanced T1 MRI NIfTI on the shared input grid.
-        t1_path: T1 MRI NIfTI on the T1c grid.
-        t2_path: T2 MRI NIfTI on the T1c grid.
-        flair_path: FLAIR MRI NIfTI on the T1c grid.
-        output_dir: Directory for the brain-tumor label map.
-        weights_path: Optional folder containing ``segresnet-brats.safetensors``;
-            omit to download and reuse the BraTS bundle. Explicit files remain accepted.
-        overwrite: Replace an existing output mask when true.
-        arithmetic_profile: ``torch-order-fp32`` (default) or ``compensated-fp32``;
-            ``compensated-fp48`` requires the renal bundle.
-        streaming: Use bounded blending and mapped logits, as in ``run``.
-        scratch_dir: Existing parent directory for temporary streaming maps.
-    """
-    _check_arguments(
-        "brats_mri_segmentation",
-        {"t1c_path": t1c_path, "t1_path": t1_path, "t2_path": t2_path, "flair_path": flair_path},
-        output_dir,
-        overwrite=overwrite,
-        arithmetic_profile=arithmetic_profile,
-        streaming=streaming,
-        scratch_dir=scratch_dir,
-    )
-    folder = (
-        weights_dir("segresnet-brats") if weights_path is None else Path(weights_path).expanduser()
-    )
-    checkpoint = folder / "segresnet-brats.safetensors" if folder.is_dir() else folder
-    return run(
-        bundle="brats_mri_segmentation",
-        weights_path=str(checkpoint),
-        output_dir=output_dir,
-        t1c_path=t1c_path,
-        t1_path=t1_path,
-        t2_path=t2_path,
-        flair_path=flair_path,
-        overwrite=overwrite,
-        arithmetic_profile=arithmetic_profile,
-        streaming=streaming,
-        scratch_dir=scratch_dir,
-    )
 
 
 def renal_cect(
@@ -619,17 +353,10 @@ def _check_arguments(
     if arithmetic_profile not in {"torch-order-fp32", "compensated-fp32", "compensated-fp48"}:
         raise InvalidInputError(f"Unknown SegResNet arithmetic profile {arithmetic_profile!r}")
     config = BUNDLES[bundle]
-    if arithmetic_profile == "compensated-fp48" and config.spec.upsample_mode != "deconv":
-        raise InvalidInputError("Paired precision requires transpose-convolution upsampling")
     missing = [role for role in config.roles if values.get(role) is None]
-    extra = [
-        role for role in _ROLES if role not in config.roles and values.get(role) is not None
-    ]
-    if missing or extra:
+    if missing:
         raise InvalidInputError(
-            f"{bundle} requires {', '.join(config.roles)}"
-            + (f"; missing {', '.join(missing)}" if missing else "")
-            + (f"; not applicable: {', '.join(extra)}" if extra else "")
+            f"{bundle} requires {', '.join(config.roles)}; missing {', '.join(missing)}"
         )
     sources = [Path(str(values[role])).expanduser() for role in config.roles]
     for role, source in zip(config.roles, sources, strict=True):
@@ -707,96 +434,24 @@ def postprocess_renal(logits: Float32Array, inverse: SpatialInverse) -> Float32A
     return transforms.merge_classes(binary)[0]
 
 
-def preprocess_brats(volumes: list[Volume]) -> Float32Array:
-    """``LoadImaged`` stacks the four modalities; ``NormalizeIntensityd`` per channel.
+def postprocess_streaming(logits: Float32Array, inverse: SpatialInverse) -> Float32Array:
+    """``postprocess_renal`` one class channel at a time, bounding class storage.
 
-    The bundle has no reorientation or resampling, so the volumes stay on the file
-    grid. Each modality is z-scored over its nonzero voxels only (zeros stay zero).
-    Returns ``(1, 4, *spatial)`` float32 in the order of ``roles``.
+    Each foreground channel is inverted, thresholded and merged in turn; a voxel keeps
+    the first channel that claims it, as ``MergeClassesd`` does.
     """
-    image = np.stack([volume.data for volume in volumes], axis=0)
-    return transforms.normalize_intensity_nonzero(image)[None]
-
-
-def postprocess_brats(logits: Float32Array) -> transforms.npt.NDArray[np.int64]:
-    """Sigmoid, ``Invertd`` (no spatial transform to undo), 0.5, BraTS labels 1/2/4.
-
-    ``logits`` is ``(3, *spatial)`` with channels (tumor core, whole tumor, enhancing
-    tumor). Returns an int64 label volume with values 0, 1, 2 and 4.
-    """
-    binary = transforms.sigmoid_threshold_mask(logits)
-    return transforms.brats_labels(binary)[0]
-
-
-def preprocess_wholebody(
-    volumes: list[Volume], pixdim: tuple[float, float, float]
-) -> tuple[Float32Array, SpatialInverse]:
-    """The whole-body bundle's ``preprocessing`` from ``EnsureChannelFirstd`` onward.
-
-    The single CT channel is reoriented to RAS, resampled to ``pixdim`` (1.5 mm for
-    ``wholeBody_ct_segmentation``, 3 mm for the ``_lowres`` variant), normalized over
-    its nonzero voxels (no HU window is applied), then rescaled to [-1, 1] by its own
-    min and max. Returns the ``(1, 1, *spatial)`` float32 network input, with spatial
-    axes in (R, A, S) order, and the image key's inverse record.
-    """
-    (volume,) = volumes
-    oriented, affine, orientation = transforms.orient(volume.data[None], volume.affine, "RAS")
-    resampled, affine, resampling = transforms.spacing(oriented, affine, pixdim)
-    record = SpatialInverse(orientation, resampling, affine)
-    normalized = transforms.normalize_intensity_nonzero(resampled)
-    image = transforms.scale_intensity_minmax(normalized, -1.0, 1.0)
-    return image[None], record
-
-
-def postprocess_wholebody(logits: Float32Array, inverse: SpatialInverse) -> Float32Array:
-    """Softmax, argmax, ``Invertd`` (nearest-neighbor, back to the source grid).
-
-    ``logits`` is ``(105, *spatial)`` on the resampled grid. Returns the float32 label
-    map (values 0-104) on the source grid.
-    """
-    # Kept to mirror the bundle's Activationsd(softmax=True) step; in exact
-    # arithmetic it does not change the argmax.
-    labels = transforms.softmax_argmax_channel(logits)
-    values, affine = transforms.invert_spacing(
-        labels, inverse.affine, inverse.resampling, "nearest"
-    )
-    values, _ = transforms.invert_orientation(values, affine, inverse.orientation)
-    return values[0]
-
-
-def postprocess_streaming(
-    logits: Float32Array,
-    inverse: SpatialInverse | None,
-    bundle: str,
-    workspace: VolumeWorkspace,
-) -> MaskArray:
-    """Retain each bundle's activation/restoration/label order with bounded class storage."""
-    if bundle in _WHOLE_BODY_PIXDIM:
-        assert inverse is not None
-        return postprocess_wholebody(logits, inverse)
-    if bundle == "renalStructures_CECT_segmentation":
-        assert inverse is not None
-        labels: Float32Array | None = None
-        for channel in range(1, logits.shape[0]):
-            values, affine = transforms.invert_spacing(
-                logits[channel : channel + 1], inverse.affine, inverse.resampling
-            )
-            values, _ = transforms.invert_orientation(values, affine, inverse.orientation)
-            active = transforms.sigmoid_threshold_mask(values)[0]
-            if labels is None:
-                labels = np.zeros(active.shape, dtype=np.float32)
-            labels[(labels == 0) & active] = channel
-        assert labels is not None
-        return labels
-    if bundle != "brats_mri_segmentation":
-        raise InvalidInputError(f"Unsupported streaming SegResNet bundle: {bundle}")
-    flat = logits.reshape(logits.shape[0], -1)
-    output = np.empty(flat.shape[1], dtype=np.int64)
-    for start in range(0, flat.shape[1], 65536):
-        stop = min(start + 65536, flat.shape[1])
-        binary = transforms.sigmoid_threshold_mask(flat[:, start:stop])
-        output[start:stop] = transforms.brats_labels(binary)[0]
-    return output.reshape(logits.shape[1:])
+    labels: Float32Array | None = None
+    for channel in range(1, logits.shape[0]):
+        values, affine = transforms.invert_spacing(
+            logits[channel : channel + 1], inverse.affine, inverse.resampling
+        )
+        values, _ = transforms.invert_orientation(values, affine, inverse.orientation)
+        active = transforms.sigmoid_threshold_mask(values)[0]
+        if labels is None:
+            labels = np.zeros(active.shape, dtype=np.float32)
+        labels[(labels == 0) & active] = channel
+    assert labels is not None
+    return labels
 
 
 def _weights_file(weights_path: str) -> Path:
@@ -953,4 +608,4 @@ def write_atomic(path: Path, mask: MaskArray, affine: Float64Array, dtype: str) 
         Path(name).unlink(missing_ok=True)
 
 
-__all__ = ["BRATS_MODEL", "BUNDLES", "RENAL_CECT_MODEL", "brats", "renal_cect", "run"]
+__all__ = ["BUNDLES", "RENAL_CECT_MODEL", "renal_cect", "run"]
