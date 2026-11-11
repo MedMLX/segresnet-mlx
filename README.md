@@ -65,6 +65,10 @@ or as the file itself.
 Inputs are finite 3D volumes on one voxel grid, with spatial units in millimetres or
 unspecified. The mask is written on the input grid as the NIfTI reader corrects it.
 
+The model was trained on CT cropped to the kidney region. Crop around each kidney,
+with a margin of about 15 mm, before running it: on a wider field of view it can label
+vertebral bodies or liver as neoplasm.
+
 The mask is float32 with labels 1 artery, 2 vein, 3 ureter, 4 neoplasm and
 5 parenchyma; where classes overlap, the lower label wins.
 
