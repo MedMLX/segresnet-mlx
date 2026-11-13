@@ -1,7 +1,7 @@
 """End-to-end parity with the MONAI renal bundle and argument rejection before downloads.
 
 The parity fixtures were recorded by running the original bundles' pinned MONAI
-transforms on seeded inputs.
+transforms on HCC-TACE CT crops.
 """
 
 from __future__ import annotations

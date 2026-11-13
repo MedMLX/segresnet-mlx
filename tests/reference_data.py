@@ -35,6 +35,11 @@ FIXTURES = ROOT / "tests/fixtures/darwin-arm64"
 
 def load_fixture(path: Path) -> tuple[Arrays, Metadata]:
     """Read a safe NumPy archive and check its recorded provenance."""
+    if (
+        path.stem.startswith(("segresnet_", "predictor_"))
+        or path.stem in {"nifti_reader", "medmlx_renal"}
+    ):
+        path = ROOT / "work/real-reference" / path.name
     assert path.is_file(), f"Regenerate the macOS arm64 upstream fixtures: {path}"
     with np.load(path, allow_pickle=False) as fixture:
         arrays = {key: fixture[key] for key in fixture.files if key != "metadata"}

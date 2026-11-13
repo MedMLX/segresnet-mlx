@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 from fixture_contracts import from_numpy
 from medmlx_core.typing import ArrayFactory
+from real_ct import renal_input
 
 from segresnet_mlx._arrays import as_numpy
 from segresnet_mlx.topology import ArithmeticProfile, SegResNetSpec
@@ -89,16 +90,7 @@ def test_renal_segresnet_checkpoint_matches_monai_raw_logits(
                 module.register_forward_pre_hook(promote)
                 module.register_forward_hook(round_output)
 
-    rng = np.random.default_rng(seed)
-    if sparse_volume:
-        # Long sparse groups exposed reduction drift missed by the small controls.
-        size = 96
-        values = np.zeros((1, spec.in_channels, size, size, size), dtype=np.float32)
-        values[:, :, 24:40, 24:40, 48:80] = rng.normal(
-            size=(1, spec.in_channels, 16, 16, 32)
-        ).astype(np.float32)
-    else:
-        values = rng.normal(size=(1, spec.in_channels, 8, 8, 8)).astype(np.float32)
+    values = renal_input(seed, sparse=sparse_volume)
     with torch.inference_mode():
         source_input = from_numpy(values)
         if arithmetic_profile == "compensated-fp48":
