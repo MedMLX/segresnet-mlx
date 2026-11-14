@@ -82,7 +82,7 @@ The mask is float32 with labels 1 artery, 2 vein, 3 ureter, 4 neoplasm and
 | `compensated-fp32` | Convolution and GroupNorm accumulate in paired Metal floats, with float32 layer outputs |
 | `compensated-fp48` | The pairs carry through the hidden layers and stitching runs in float64 on the host |
 
-The runner returns `{"outputs": {"mask": path}, "details": {...}}`, with run metadata in `details`.
+The runner returns `{"outputs": {"mask": path}, "artifacts": {"mask": ...}, "details": {...}}`: the `mask` artifact names the labels and the input grid it is on, and `details` holds run metadata.
 Invalid inputs raise `InvalidInputError`; missing or mismatched weights raise
 `AssetNotReadyError`; inference failures raise `ModelExecutionError`.
 

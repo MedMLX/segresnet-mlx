@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 import numpy as np
 import pytest
 from medmlx_core.errors import InvalidInputError
+from medmlx_core.outputs import validate_outputs
 from reference_data import bundle_fixture, mlx_weights, segresnet_spec, write_inputs
 
 from segresnet_mlx import medmlx
@@ -104,6 +105,12 @@ def test_registered_streaming_runner_preserves_upstream_labels_and_cleans_worksp
         arrays["axis::runner_mask"],
     )
     assert result["details"].get("streaming") is True
+    _, artifacts = validate_outputs(result)
+    assert artifacts["mask"]["kind"] == "label_map"
+    assert artifacts["mask"].get("grid_of") == "arterial_path"
+    assert artifacts["mask"].get("labels") == [
+        {"value": value, "name": name} for value, name in BUNDLES[RENAL].labels.items()
+    ]
     assert not list(scratch.iterdir())
 
 

@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from segresnet_mlx._arrays import Float32Array, Float64Array, MaskArray
 from segresnet_mlx._records import RunResult, Runtime
@@ -25,6 +25,7 @@ from medmlx_core.errors import (
     InvalidInputError,
     ModelExecutionError,
 )
+from medmlx_core.outputs import artifact
 from medmlx_core.weights import weights_dir, weights_revision
 
 from segresnet_mlx import transforms
@@ -87,6 +88,8 @@ RENAL_CECT_MODEL = {
     },
 }
 
+type BundleName = Literal["renalStructures_CECT_segmentation"]
+
 # The renal bundle's Spacingd pixdim, in mm.
 _RENAL_SPACING = (0.8, 0.8, 0.8)
 
@@ -121,16 +124,16 @@ class SpatialInverse:
 
 def run(
     *,
-    bundle: str,
-    weights_path: str,
-    output_dir: str,
-    arterial_path: str | None = None,
-    venous_path: str | None = None,
-    excretory_path: str | None = None,
+    bundle: BundleName,
+    weights_path: str | Path,
+    output_dir: str | Path,
+    arterial_path: str | Path | None = None,
+    venous_path: str | Path | None = None,
+    excretory_path: str | Path | None = None,
     overwrite: bool = False,
     arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
     streaming: bool = False,
-    scratch_dir: str | None = None,
+    scratch_dir: str | Path | None = None,
 ) -> RunResult:
     """Segment one case with a MONAI SegResNet bundle and write the label map.
 
@@ -175,8 +178,10 @@ def run(
             None uses the system temporary directory. Files are cleaned up on exit.
 
     Returns:
-        ``{"outputs": {"mask": path}, "details": {...}}``; ``details`` is described
-        by ``segresnet_mlx._records.Details`` and always has
+        ``{"outputs": {"mask": path}, "artifacts": {"mask": ...}, "details": {...}}``.
+        The ``mask`` artifact is a ``label_map`` in ``image_physical`` space on the
+        ``arterial_path`` grid, listing the bundle's labels 0-5. ``details`` is
+        described by ``segresnet_mlx._records.Details`` and always has
         ``requires_human_review`` set to true.
 
     Raises:
@@ -236,6 +241,14 @@ def run(
     present = sorted(int(value) for value in np.unique(mask))
     return {
         "outputs": {"mask": mask_path.as_posix()},
+        "artifacts": {
+            "mask": artifact(
+                kind="label_map",
+                coordinate_space="image_physical",
+                grid_of="arterial_path",
+                labels=[{"value": value, "name": name} for value, name in config.labels.items()],
+            )
+        },
         "details": {
             "weights_revision": weights_revision(weights.parent),
             "bundle": bundle,
@@ -268,15 +281,15 @@ def run(
 
 def renal_cect(
     *,
-    arterial_path: str,
-    venous_path: str,
-    excretory_path: str,
-    output_dir: str,
-    weights_path: str | None = None,
+    arterial_path: str | Path,
+    venous_path: str | Path,
+    excretory_path: str | Path,
+    output_dir: str | Path,
+    weights_path: str | Path | None = None,
     overwrite: bool = False,
     arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
     streaming: bool = False,
-    scratch_dir: str | None = None,
+    scratch_dir: str | Path | None = None,
 ) -> RunResult:
     """Segment renal CECT; omit weights_path to download its cached model folder.
 
@@ -320,7 +333,7 @@ def renal_cect(
     checkpoint = folder / "segresnet-renal-cect.safetensors" if folder.is_dir() else folder
     return run(
         bundle="renalStructures_CECT_segmentation",
-        weights_path=str(checkpoint),
+        weights_path=checkpoint,
         output_dir=output_dir,
         arterial_path=arterial_path,
         venous_path=venous_path,
@@ -334,13 +347,13 @@ def renal_cect(
 
 def _check_arguments(
     bundle: str,
-    values: Mapping[str, str | None],
-    output_dir: str,
+    values: Mapping[str, str | Path | None],
+    output_dir: str | Path,
     *,
     overwrite: bool,
     arithmetic_profile: ArithmeticProfile,
     streaming: bool = False,
-    scratch_dir: str | None = None,
+    scratch_dir: str | Path | None = None,
 ) -> tuple[Bundle, Path]:
     """Check every ``run`` argument before weights, inputs or MLX are loaded.
 
@@ -458,7 +471,7 @@ def postprocess_streaming(logits: Float32Array, inverse: SpatialInverse) -> Floa
     return labels
 
 
-def _weights_file(weights_path: str) -> Path:
+def _weights_file(weights_path: str | Path) -> Path:
     """Validate a safetensors file path while retaining any Hub-cache symlink."""
     # MLX identifies the file format from the supplied name. Hub cache paths are
     # named .safetensors symlinks whose underlying content-addressed blobs have no suffix.
@@ -477,7 +490,7 @@ def _weights_file(weights_path: str) -> Path:
     return path
 
 
-def load_inputs(roles: list[tuple[str, str | None]]) -> list[Volume]:
+def load_inputs(roles: list[tuple[str, str | Path | None]]) -> list[Volume]:
     """Load each ``(role, path)`` and require one shared voxel grid.
 
     Every volume must match the first one's shape and affine (``atol=1e-5``).

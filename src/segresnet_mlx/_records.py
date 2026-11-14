@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import NotRequired, TypedDict
 
+from medmlx_core.outputs import Artifact
+
 from segresnet_mlx.topology import ArithmeticProfile
 
 type Json = bool | int | float | str | list[Json] | dict[str, Json] | None
@@ -74,7 +76,11 @@ class Details(TypedDict):
 
 
 class RunResult(TypedDict):
-    """Result of ``segresnet_mlx.medmlx.run``: ``outputs["mask"]`` is the mask path."""
+    """Result of ``segresnet_mlx.medmlx.run``: ``outputs["mask"]`` is the mask path.
+
+    ``artifacts["mask"]`` describes the mask file (label map, labels, source grid).
+    """
 
     outputs: dict[str, str]
+    artifacts: dict[str, Artifact]
     details: Details
