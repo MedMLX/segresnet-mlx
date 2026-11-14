@@ -428,10 +428,14 @@ def postprocess_renal(logits: Float32Array, inverse: SpatialInverse) -> Float32A
     map (values 0-5) on the source grid. The inversion is applied to the logits
     before the sigmoid, in the bundle's order.
     """
-    values, affine = transforms.invert_spacing(logits, inverse.affine, inverse.resampling)
+    # Background never contributes to the final class map.
+    values, affine = transforms.invert_spacing(logits[1:], inverse.affine, inverse.resampling)
     values, _ = transforms.invert_orientation(values, affine, inverse.orientation)
-    binary = transforms.sigmoid_threshold_mask(values).astype(np.float32)
-    return transforms.merge_classes(binary)[0]
+    # Preserve float32 sigmoid rounding at the threshold, including near-negative logits.
+    active = transforms.sigmoid_threshold_mask(values)
+    # Foreground channels correspond to class IDs 1..5; the first active one wins.
+    first_active = np.argmax(active, axis=0) + 1
+    return np.where(np.any(active, axis=0), first_active, 0).astype(np.float32)
 
 
 def postprocess_streaming(logits: Float32Array, inverse: SpatialInverse) -> Float32Array:
