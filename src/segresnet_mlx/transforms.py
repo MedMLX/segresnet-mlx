@@ -16,7 +16,9 @@ are in mm; the runner validates spatial units, and these functions assume mm.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -54,8 +56,9 @@ type Float64Array = npt.NDArray[np.float64]
 # monai.data.utils.AFFINE_TOL
 AFFINE_TOL = 1e-3
 _LABELS = (("L", "R"), ("P", "A"), ("I", "S"))
-# Bound the float64 corner arrays of one resampling chunk.
+# Bound the float64 corner arrays of all resampling blocks in flight together.
 _CHUNK_VOXELS = 1 << 20
+_THREADS = min(8, os.cpu_count() or 1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,19 +342,37 @@ def _grid_sample(
         theta[row, column] == 0 for row in range(3) for column in range(3) if row != column
     )
     result = np.empty((data.shape[0], depth, height, width), dtype=np.float32)
-    step = max(1, _CHUNK_VOXELS // max(1, height * width * data.shape[0]))
-    for start in range(0, depth, step):
-        stop = min(depth, start + step)
+    # Blocks of whole output rows, run on _THREADS threads (NumPy releases the
+    # GIL). Each block holds _CHUNK_VOXELS // _THREADS voxels, so the blocks in
+    # flight together hold about one serial chunk of float64 temporaries. Every
+    # voxel uses the same arithmetic in any split, so the result is bitwise
+    # identical to a single-threaded pass.
+    budget = max(1, _CHUNK_VOXELS // _THREADS)
+    row_voxels = max(1, width * data.shape[0])
+    planes = max(1, budget // (height * row_voxels))
+    rows = height if planes > 1 else min(height, max(1, budget // row_voxels))
+
+    def fill(start: int, top: int) -> None:
+        stop, bottom = min(depth, start + planes), min(height, top + rows)
         if separable:
             gx = zx[0][0] + ys[0][0]
-            gy = zx[1][0, 0] + ys[1]
+            gy = zx[1][0, 0] + ys[1][top:bottom]
             gz = zx[2][start:stop, 0] + ys[2][0]
-            result[:, start:stop] = _sample_separable(data, gx, gy, gz)
+            result[:, start:stop, top:bottom] = _sample_separable(data, gx, gy, gz)
         else:
             coordinates = [
-                zx[row][start:stop, None, :] + ys[row][None, :, None] for row in range(3)
+                zx[row][start:stop, None, :] + ys[row][None, top:bottom, None] for row in range(3)
             ]
-            result[:, start:stop] = _sample(data, *coordinates)
+            result[:, start:stop, top:bottom] = _sample(data, *coordinates)
+
+    with ThreadPoolExecutor(max_workers=_THREADS) as pool:
+        blocks = [
+            pool.submit(fill, start, top)
+            for start in range(0, depth, planes)
+            for top in range(0, height, rows)
+        ]
+        for block in blocks:
+            block.result()
     return result
 
 
