@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import NotRequired, TypedDict
 
-from medmlx_core.outputs import Artifact
+from medmlx_core.outputs import RunResult as _RunResult
 
 from segresnet_mlx.topology import ArithmeticProfile
 
@@ -75,12 +75,7 @@ class Details(TypedDict):
     requires_human_review: bool
 
 
-class RunResult(TypedDict):
-    """Result of ``segresnet_mlx.segment``: ``outputs["mask"]`` is the mask path.
-
-    ``artifacts["mask"]`` describes the mask file (label map, labels, source grid).
-    """
-
-    outputs: dict[str, str]
-    artifacts: dict[str, Artifact]
-    details: Details
+# Result of ``segresnet_mlx.segment``: ``outputs["mask"]`` is the mask path.
+#
+# ``artifacts["mask"]`` describes the mask file (label map, labels, source grid).
+type RunResult = _RunResult[Details]
