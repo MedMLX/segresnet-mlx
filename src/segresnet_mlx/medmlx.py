@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import time
 from collections.abc import Mapping
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, cast
 
 from segresnet_mlx._arrays import Float32Array, Float64Array, MaskArray
 from segresnet_mlx._records import RunResult, Runtime
@@ -25,8 +23,9 @@ from medmlx_core.errors import (
     InvalidInputError,
     ModelExecutionError,
 )
+from medmlx_core.files import PathLike, input_channels, output_targets, publish
 from medmlx_core.outputs import artifact
-from medmlx_core.weights import weights_dir, weights_revision
+from medmlx_core.weights import model_folder, weights_revision
 
 from segresnet_mlx import transforms
 from segresnet_mlx.topology import ArithmeticProfile, SegResNetSpec
@@ -37,8 +36,8 @@ class Bundle:
     """One MONAI bundle: network topology, inferer settings and file contract.
 
     ``roi_size``, ``sw_batch_size``, ``overlap``, ``mode`` and ``padding_mode`` are the
-    sliding-window settings described in ``SlidingWindowConfig``. ``roles`` names the
-    ``run`` path arguments the bundle needs, in network channel order. ``labels`` maps
+    sliding-window settings described in ``SlidingWindowConfig``. ``channels`` names the
+    ``image_paths`` keys the bundle needs, in network channel order. ``labels`` maps
     each value written to the mask to its name; ``output_dtype`` is the NIfTI dtype.
     """
 
@@ -46,7 +45,7 @@ class Bundle:
     roi_size: tuple[int, int, int]
     sw_batch_size: int
     overlap: float
-    roles: tuple[str, ...]
+    channels: tuple[str, ...]
     labels: Mapping[int, str]
     output_dtype: str
     mode: str = "constant"
@@ -61,7 +60,7 @@ BUNDLES: dict[str, Bundle] = {
         roi_size=(96, 96, 96),
         sw_batch_size=4,
         overlap=0.25,
-        roles=("arterial_path", "venous_path", "excretory_path"),
+        channels=("arterial", "venous", "excretory"),
         labels={
             0: "background",
             1: "artery",
@@ -78,7 +77,7 @@ RENAL_CECT_MODEL = {
     "id": "segresnet-renal-cect",
     "label": "SegResNet renal CECT",
     "task": "segmentation",
-    "run": "segresnet_mlx.medmlx:renal_cect",
+    "run": "segresnet_mlx.medmlx:segment",
     # Measured MLX peak for a 478x277x161 three-phase CT; larger inputs need more.
     "peak_memory_gb": 4.1,
     "summary": "Renal structures from arterial, venous and excretory phase CT.",
@@ -88,7 +87,10 @@ RENAL_CECT_MODEL = {
     },
 }
 
-type BundleName = Literal["renalStructures_CECT_segmentation"]
+RENAL = "renalStructures_CECT_segmentation"
+MODEL_ID = "segresnet-renal-cect"
+WEIGHTS_NAME = "segresnet-renal-cect.safetensors"
+OUTPUT_NAME = "mask.nii.gz"
 
 # The renal bundle's Spacingd pixdim, in mm.
 _RENAL_SPACING = (0.8, 0.8, 0.8)
@@ -122,97 +124,84 @@ class SpatialInverse:
     affine: Float64Array
 
 
-def run(
+def segment(
     *,
-    bundle: BundleName,
-    weights_path: str | Path,
-    output_dir: str | Path,
-    arterial_path: str | Path | None = None,
-    venous_path: str | Path | None = None,
-    excretory_path: str | Path | None = None,
+    image_paths: Mapping[str, PathLike],
+    output_dir: PathLike,
+    weights_path: PathLike | None = None,
     overwrite: bool = False,
-    arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
+    precision: ArithmeticProfile = "torch-order-fp32",
     streaming: bool = False,
-    scratch_dir: str | Path | None = None,
+    scratch_dir: PathLike | None = None,
 ) -> RunResult:
-    """Segment one case with a MONAI SegResNet bundle and write the label map.
+    """Segment renal structures from co-registered arterial, venous and excretory CT.
 
-    ``bundle`` is ``renalStructures_CECT_segmentation``, which takes
-    ``arterial_path``, ``venous_path`` and ``excretory_path``: co-registered CT
-    phases on one grid. ``weights_path`` is the native
-    ``segresnet-renal-cect.safetensors`` file from ``MedMLX/segresnet-renal-cect-mlx``.
+    ``image_paths`` maps ``arterial``, ``venous`` and ``excretory`` to finite 3D
+    NIfTI volumes with identical shape and affine (atol 1e-5); the bundle's
+    ``renalStructures_CECT_segmentation`` preprocessing, sliding window and
+    inverse transforms run unchanged. Writes ``mask.nii.gz`` in ``output_dir`` on
+    the arterial shape and reader-selected affine (see ``Volume``): float32 labels
+    0-5, as the bundle's ``SaveImaged`` wrote them. Every argument and output target
+    is checked before weights download or inputs load. The NIfTI spatial-unit field
+    must be mm or unspecified (then assumed mm); other units are refused, not
+    converted. Paths are not locked against concurrent replacement after the alias
+    check.
 
-    Inputs must be finite 3D NIfTI volumes with identical shape and affine
-    (atol 1e-5). Writes ``<bundle>_mask.nii.gz`` in ``output_dir`` on the first
-    input's shape and reader-selected affine (see ``Volume``): float32 labels 0-5,
-    as the bundle's ``SaveImaged`` wrote them. An existing mask is replaced only when
-    ``overwrite`` is true; output aliases of input images are refused by a
-    preflight check. Every argument is checked before weights or inputs are loaded.
-    The NIfTI spatial-unit field must be mm or unspecified (then assumed mm); other
-    units are refused, not converted. Paths are not locked against concurrent
-    replacement after the alias check.
-
-    ``arithmetic_profile="compensated-fp32"`` uses Metal float pairs for
-    convolution and GroupNorm accumulation, with float32 layer boundaries.
-    Its source comparison uses float64 internal accumulators and float32
-    outputs. The default retains the existing Torch-order FP32 arithmetic.
-    ``compensated-fp48`` carries both words through the hidden layers and uses
-    float64 host stitching before one float32 logits export. It compares with the
-    unchanged original graph evaluated in float64 throughout its network and inferer.
+    ``precision="compensated-fp32"`` uses Metal float pairs for convolution and
+    GroupNorm accumulation, with float32 layer boundaries. Its source comparison
+    uses float64 internal accumulators and float32 outputs. The default retains the
+    Torch-order FP32 arithmetic. ``compensated-fp48`` carries both words through the
+    hidden layers and uses float64 host stitching before one float32 logits export.
+    It compares with the unchanged original graph evaluated in float64 throughout
+    its network and inferer.
 
     Args:
-        bundle: ``renalStructures_CECT_segmentation``.
-        weights_path: Path to ``segresnet-renal-cect.safetensors``. Hugging Face
-            cache file paths are accepted; directories and Torch ``.pt`` checkpoints
-            are not.
-        output_dir: Directory for ``<bundle>_mask.nii.gz``; created if missing.
-        arterial_path: Arterial-phase 3D CT NIfTI; required.
-        venous_path: Venous-phase 3D CT NIfTI on the arterial grid; required.
-        excretory_path: Excretory-phase 3D CT NIfTI on the arterial grid; required.
-        overwrite: Replace an existing output mask when true; defaults to false.
-        arithmetic_profile: ``torch-order-fp32`` (default), ``compensated-fp32``,
-            or ``compensated-fp48``.
+        image_paths: ``{"arterial": ..., "venous": ..., "excretory": ...}`` CT NIfTI
+            files on one voxel grid.
+        output_dir: Directory for ``mask.nii.gz``; created if missing.
+        weights_path: Folder containing ``segresnet-renal-cect.safetensors`` as
+            published in ``MedMLX/segresnet-renal-cect-mlx``; ``None`` downloads it
+            into the shared MedMLX cache. Hub-cache symlinks keep their file name.
+        overwrite: Replace an existing ``mask.nii.gz`` when true; defaults to false.
+        precision: ``torch-order-fp32`` (default), ``compensated-fp32`` or
+            ``compensated-fp48``.
         streaming: Use bounded blending intermediates and temporary mapped logits.
             The final label volume remains resident; defaults to False.
-        scratch_dir: Parent directory for temporary maps when streaming is enabled;
-            None uses the system temporary directory. Files are cleaned up on exit.
+        scratch_dir: Existing parent folder for temporary maps when streaming is
+            enabled; None uses the system temporary directory. Files are removed on
+            exit.
 
     Returns:
         ``{"outputs": {"mask": path}, "artifacts": {"mask": ...}, "details": {...}}``.
         The ``mask`` artifact is a ``label_map`` in ``image_physical`` space on the
-        ``arterial_path`` grid, listing the bundle's labels 0-5. ``details`` is
-        described by ``segresnet_mlx._records.Details`` and always has
-        ``requires_human_review`` set to true.
+        arterial grid, listing the bundle's labels 0-5. ``details`` is described by
+        ``segresnet_mlx._records.Details`` and always has ``requires_human_review``
+        set to true.
 
     Raises:
-        InvalidInputError: Unknown bundle or profile, missing or absent input paths,
-            ``overwrite`` or ``streaming`` not a bool, ``output_dir`` not a directory,
-            an existing output without ``overwrite``, or an unreadable, non-3D,
+        InvalidInputError: Unknown precision, wrong or absent ``image_paths`` channels,
+            ``overwrite`` or ``streaming`` not a bool, an output target that exists
+            without ``overwrite`` or aliases an input, or an unreadable, non-3D,
             non-finite, non-mm or mismatched-grid NIfTI input.
-        AssetNotReadyError: The weights file is missing, not ``.safetensors``, or
-            does not match the bundle's network.
+        AssetNotReadyError: The weights folder or file is missing, or the file does
+            not match the bundle's network.
         ModelExecutionError: Inference failed or produced a mask off the source grid
             or with labels outside the bundle's set.
     """
-    values = {
-        "arterial_path": arterial_path,
-        "venous_path": venous_path,
-        "excretory_path": excretory_path,
-    }
-    config, mask_path = _check_arguments(
-        bundle,
-        values,
+    config = BUNDLES[RENAL]
+    sources, mask_path = _check_arguments(
+        config,
+        image_paths,
         output_dir,
         overwrite=overwrite,
-        arithmetic_profile=arithmetic_profile,
+        precision=precision,
         streaming=streaming,
         scratch_dir=scratch_dir,
     )
-    output_root = mask_path.parent
-    weights = _weights_file(weights_path)
+    weights = _weights_file(model_folder(MODEL_ID, weights_path) / WEIGHTS_NAME)
     started = time.perf_counter()
-    volumes = load_inputs([(role, values[role]) for role in config.roles])
-    network = _load_network(weights, config.spec, arithmetic_profile=arithmetic_profile)
+    volumes = load_inputs(list(sources.items()))
+    network = _load_network(weights, config.spec, arithmetic_profile=precision)
     loaded = time.perf_counter()
     image, inverse = preprocess_renal(volumes)
     prepared = time.perf_counter()
@@ -235,8 +224,8 @@ def run(
             else postprocess_streaming(logits[0], inverse)
         )
     _validate_mask(mask, volumes[0], config)
-    output_root.mkdir(parents=True, exist_ok=True)
-    write_atomic(mask_path, mask, volumes[0].affine, config.output_dtype)
+    affine, dtype = volumes[0].affine, config.output_dtype
+    publish({mask_path: lambda path: transforms.write_nifti(path, mask, affine, dtype)})
     finished = time.perf_counter()
     present = sorted(int(value) for value in np.unique(mask))
     return {
@@ -245,14 +234,14 @@ def run(
             "mask": artifact(
                 kind="label_map",
                 coordinate_space="image_physical",
-                grid_of="arterial_path",
+                grid_of=f"image_paths.{config.channels[0]}",
                 labels=[{"value": value, "name": name} for value, name in config.labels.items()],
             )
         },
         "details": {
             "weights_revision": weights_revision(weights.parent),
-            "bundle": bundle,
-            "arithmetic_profile": arithmetic_profile,
+            "bundle": RENAL,
+            "precision": precision,
             "streaming": streaming,
             "labels": {str(value): name for value, name in config.labels.items()},
             "labels_present": present,
@@ -279,119 +268,31 @@ def run(
     }
 
 
-def renal_cect(
-    *,
-    arterial_path: str | Path,
-    venous_path: str | Path,
-    excretory_path: str | Path,
-    output_dir: str | Path,
-    weights_path: str | Path | None = None,
-    overwrite: bool = False,
-    arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
-    streaming: bool = False,
-    scratch_dir: str | Path | None = None,
-) -> RunResult:
-    """Segment renal CECT; omit weights_path to download its cached model folder.
-
-    The arterial, venous and excretory CT volumes must share a voxel grid. An
-    explicit folder contains ``segresnet-renal-cect.safetensors`` as published for
-    this bundle; an explicit safetensors file is also accepted. Automatic downloads
-    use ``MedMLX/segresnet-renal-cect-mlx``. Arithmetic and preprocessing are
-    delegated unchanged to ``run``.
-
-    Args:
-        arterial_path: Arterial-phase CT NIfTI on the shared input grid.
-        venous_path: Venous-phase CT NIfTI on the arterial grid.
-        excretory_path: Excretory-phase CT NIfTI on the arterial grid.
-        output_dir: Directory for the renal label map.
-        weights_path: Optional folder containing ``segresnet-renal-cect.safetensors``;
-            omit to download and reuse the renal bundle. Explicit files remain accepted.
-        overwrite: Replace an existing output mask when true.
-        arithmetic_profile: ``torch-order-fp32`` (default), ``compensated-fp32``
-            or ``compensated-fp48``; see ``run`` for their arithmetic contracts.
-        streaming: Use bounded blending and mapped logits, as in ``run``.
-        scratch_dir: Existing parent directory for temporary streaming maps.
-    """
-    _check_arguments(
-        "renalStructures_CECT_segmentation",
-        {
-            "arterial_path": arterial_path,
-            "venous_path": venous_path,
-            "excretory_path": excretory_path,
-        },
-        output_dir,
-        overwrite=overwrite,
-        arithmetic_profile=arithmetic_profile,
-        streaming=streaming,
-        scratch_dir=scratch_dir,
-    )
-    folder = (
-        weights_dir("segresnet-renal-cect")
-        if weights_path is None
-        else Path(weights_path).expanduser()
-    )
-    checkpoint = folder / "segresnet-renal-cect.safetensors" if folder.is_dir() else folder
-    return run(
-        bundle="renalStructures_CECT_segmentation",
-        weights_path=checkpoint,
-        output_dir=output_dir,
-        arterial_path=arterial_path,
-        venous_path=venous_path,
-        excretory_path=excretory_path,
-        overwrite=overwrite,
-        arithmetic_profile=arithmetic_profile,
-        streaming=streaming,
-        scratch_dir=scratch_dir,
-    )
-
-
 def _check_arguments(
-    bundle: str,
-    values: Mapping[str, str | Path | None],
-    output_dir: str | Path,
+    config: Bundle,
+    image_paths: Mapping[str, PathLike],
+    output_dir: PathLike,
     *,
     overwrite: bool,
-    arithmetic_profile: ArithmeticProfile,
-    streaming: bool = False,
-    scratch_dir: str | Path | None = None,
-) -> tuple[Bundle, Path]:
-    """Check every ``run`` argument before weights, inputs or MLX are loaded.
+    precision: ArithmeticProfile,
+    streaming: bool,
+    scratch_dir: PathLike | None,
+) -> tuple[dict[str, Path], Path]:
+    """Check every ``segment`` argument before weights, inputs or MLX are loaded.
 
-    Returns the bundle settings and the absolute mask path.
+    Returns the input files by channel, in network order, and the mask path.
     """
-    if bundle not in BUNDLES:
-        raise InvalidInputError(
-            f"Unknown SegResNet bundle {bundle!r}; expected one of: {', '.join(BUNDLES)}"
-        )
-    if arithmetic_profile not in {"torch-order-fp32", "compensated-fp32", "compensated-fp48"}:
-        raise InvalidInputError(f"Unknown SegResNet arithmetic profile {arithmetic_profile!r}")
-    config = BUNDLES[bundle]
-    missing = [role for role in config.roles if values.get(role) is None]
-    if missing:
-        raise InvalidInputError(
-            f"{bundle} requires {', '.join(config.roles)}; missing {', '.join(missing)}"
-        )
-    sources = [Path(str(values[role])).expanduser() for role in config.roles]
-    for role, source in zip(config.roles, sources, strict=True):
-        if not source.is_file():
-            raise InvalidInputError(f"{role} not found: {source}")
-    for name, flag in (("overwrite", overwrite), ("streaming", streaming)):
-        if not isinstance(cast(object, flag), bool):
-            raise InvalidInputError(f"{name} must be true or false")
+    if precision not in {"torch-order-fp32", "compensated-fp32", "compensated-fp48"}:
+        raise InvalidInputError(f"Unknown SegResNet precision {precision!r}")
+    sources = input_channels(image_paths, config.channels)
+    if not isinstance(cast(object, streaming), bool):
+        raise InvalidInputError("streaming must be true or false")
     if streaming and scratch_dir is not None and not Path(scratch_dir).expanduser().is_dir():
         raise InvalidInputError("scratch_dir must name an existing directory")
-    output_root = Path(output_dir).expanduser().resolve()
-    if output_root.exists() and not output_root.is_dir():
-        raise InvalidInputError(f"output_dir is not a directory: {output_root}")
-    mask_path = output_root / f"{bundle}_mask.nii.gz"
-    for source in sources:
-        if mask_path.resolve() == source.resolve() or (
-            mask_path.exists() and mask_path.samefile(source)
-        ):
-            raise InvalidInputError("SegResNet output must differ from every input image")
-    if mask_path.exists() and not overwrite:
-        raise InvalidInputError(f"Output exists: {mask_path}; pass overwrite=true to replace it")
-    return config, mask_path
+    targets = output_targets(
+        output_dir, {"mask": OUTPUT_NAME}, overwrite=overwrite, inputs=sources.values()
+    )
+    return sources, targets["mask"]
 
 
 def preprocess_renal(volumes: list[Volume]) -> tuple[Float32Array, SpatialInverse]:
@@ -557,10 +458,10 @@ def _load_network(
     arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
 ) -> SegResNet:
     """Strictly load converted weights for the bundle topology."""
-    from segresnet_mlx.weights import load_model
+    from segresnet_mlx.weights import load_network
 
     try:
-        return load_model(weights, spec=spec, arithmetic_profile=arithmetic_profile)
+        return load_network(weights, spec=spec, arithmetic_profile=arithmetic_profile)
     except (InvalidInputError, ValueError, RuntimeError) as error:
         raise AssetNotReadyError(
             f"SegResNet weights {weights} do not match {spec}: {error}",
@@ -611,18 +512,4 @@ def _validate_mask(mask: MaskArray, reference: Volume, config: Bundle) -> None:
         raise ModelExecutionError("SegResNet exported labels outside the bundle contract")
 
 
-def write_atomic(path: Path, mask: MaskArray, affine: Float64Array, dtype: str) -> None:
-    """Write the mask NIfTI via a temporary file in ``path.parent``, then rename it.
-
-    A failure therefore never leaves a partial file at ``path``.
-    """
-    descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".nii.gz", dir=path.parent)
-    os.close(descriptor)
-    try:
-        transforms.write_nifti(Path(name), mask, affine, dtype)
-        os.replace(name, path)
-    finally:
-        Path(name).unlink(missing_ok=True)
-
-
-__all__ = ["BUNDLES", "RENAL_CECT_MODEL", "renal_cect", "run"]
+__all__ = ["BUNDLES", "OUTPUT_NAME", "RENAL_CECT_MODEL", "segment"]

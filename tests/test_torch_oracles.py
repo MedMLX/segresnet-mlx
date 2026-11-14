@@ -18,7 +18,7 @@ from real_ct import renal_input
 
 from segresnet_mlx._arrays import as_numpy
 from segresnet_mlx.topology import ArithmeticProfile, SegResNetSpec
-from segresnet_mlx.weights import load_model
+from segresnet_mlx.weights import load_network
 
 pytestmark = pytest.mark.mlx
 
@@ -97,7 +97,7 @@ def test_renal_segresnet_checkpoint_matches_monai_raw_logits(
             source_input = source_input.double()
         expected = source(source_input).float().numpy()
 
-    candidate = load_model(Path(weights_file), spec=spec, arithmetic_profile=arithmetic_profile)
+    candidate = load_network(Path(weights_file), spec=spec, arithmetic_profile=arithmetic_profile)
     actual = candidate(cast(ArrayFactory, mx.array)(values))
     mx.eval(actual)
     host = as_numpy(actual)

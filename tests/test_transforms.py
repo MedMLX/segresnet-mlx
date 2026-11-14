@@ -98,11 +98,9 @@ def test_mask_file_matches_the_bundle_writer(tmp_path: Path) -> None:
     """Compare saved label values, dtype, affine, and form codes with MONAI."""
     arrays, saved = bundle_fixture("renal")
     for case in CASES:
-        reference = nib.load(
-            cast(str, write_inputs(tmp_path, "renal", case)[BUNDLES[RENAL].roles[0]])
-        )
+        reference = nib.load(write_inputs(tmp_path, "renal", case)[BUNDLES[RENAL].channels[0]])
         path = tmp_path / f"{case}.nii.gz"
-        medmlx.write_atomic(
+        transforms.write_nifti(
             path,
             cast(MaskArray, arrays[f"{case}::mask"]),
             reference.affine,

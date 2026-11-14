@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from segresnet_mlx.inference import forward_patch as forward_patch
+    from segresnet_mlx.medmlx import segment as segment
     from segresnet_mlx.network import SegResNet as SegResNet
     from segresnet_mlx.predictor import BUNDLE_CONFIGS as BUNDLE_CONFIGS
     from segresnet_mlx.predictor import BundlePredictor as BundlePredictor
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
     from segresnet_mlx.predictor import predict_logits as predict_logits
     from segresnet_mlx.telemetry import WindowTelemetry as WindowTelemetry
     from segresnet_mlx.topology import SegResNetSpec as SegResNetSpec
-    from segresnet_mlx.weights import load_model as load_model
+    from segresnet_mlx.weights import load_network as load_network
     from segresnet_mlx.weights import required_shapes as required_shapes
 
 __version__ = "0.4.1"
@@ -29,9 +30,10 @@ _EXPORTS = {
     "SlidingWindowConfig": "segresnet_mlx.predictor",
     "WindowTelemetry": "segresnet_mlx.telemetry",
     "forward_patch": "segresnet_mlx.inference",
-    "load_model": "segresnet_mlx.weights",
+    "load_network": "segresnet_mlx.weights",
     "predict_logits": "segresnet_mlx.predictor",
     "required_shapes": "segresnet_mlx.weights",
+    "segment": "segresnet_mlx.medmlx",
 }
 
 __all__ = [
@@ -42,9 +44,10 @@ __all__ = [
     "SlidingWindowConfig",
     "WindowTelemetry",
     "forward_patch",
-    "load_model",
+    "load_network",
     "predict_logits",
     "required_shapes",
+    "segment",
 ]
 
 

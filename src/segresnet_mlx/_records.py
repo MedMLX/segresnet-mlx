@@ -49,7 +49,7 @@ class Seconds(TypedDict):
 
 
 class Details(TypedDict):
-    """The ``details`` block of ``run``'s result.
+    """The ``details`` block of ``segment``'s result.
 
     ``labels`` maps each label value (as a string) to its name and ``labels_present``
     lists the values found in the written mask. ``input_shape`` is the first input's
@@ -61,7 +61,7 @@ class Details(TypedDict):
 
     weights_revision: NotRequired[str | None]
     bundle: str
-    arithmetic_profile: ArithmeticProfile
+    precision: ArithmeticProfile
     streaming: NotRequired[bool]
     labels: dict[str, str]
     labels_present: list[int]
@@ -76,7 +76,7 @@ class Details(TypedDict):
 
 
 class RunResult(TypedDict):
-    """Result of ``segresnet_mlx.medmlx.run``: ``outputs["mask"]`` is the mask path.
+    """Result of ``segresnet_mlx.segment``: ``outputs["mask"]`` is the mask path.
 
     ``artifacts["mask"]`` describes the mask file (label map, labels, source grid).
     """

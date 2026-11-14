@@ -11,7 +11,6 @@ import numpy as np
 from fixture_contracts import (
     Arrays,
     BundleMetadata,
-    InputPaths,
     Metadata,
     ModelFixture,
     ModelMetadata,
@@ -119,7 +118,7 @@ def mlx_weights(
 
 
 BUNDLE_INPUT_KEYS = {
-    "renal": {"arterial_path": "artery", "venous_path": "vein", "excretory_path": "excret"},
+    "renal": {"arterial": "artery", "venous": "vein", "excretory": "excret"},
 }
 
 
@@ -130,12 +129,12 @@ def bundle_fixture(name: str) -> tuple[Arrays, dict[str, SavedFacts]]:
     return arrays, {case["case"]: case["saved"] for case in metadata["cases"]}
 
 
-def write_inputs(tmp_path: Path, name: str, case: str) -> InputPaths:
-    """Write recorded NIfTI inputs and return paths keyed by runner role."""
+def write_inputs(tmp_path: Path, name: str, case: str) -> dict[str, str]:
+    """Write recorded NIfTI inputs and return paths keyed by ``image_paths`` channel."""
     arrays, _ = bundle_fixture(name)
     paths: dict[str, str] = {}
     for role, key in BUNDLE_INPUT_KEYS[name].items():
         path = tmp_path / f"{case}_{key}.nii.gz"
         path.write_bytes(arrays[f"{case}::{key}"].tobytes())
         paths[role] = str(path)
-    return cast(InputPaths, paths)
+    return paths

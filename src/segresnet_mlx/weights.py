@@ -64,7 +64,7 @@ def required_shapes(spec: SegResNetSpec) -> dict[str, tuple[int, ...]]:
     return shapes
 
 
-def load_model(
+def load_network(
     weights_path: Path,
     *,
     spec: SegResNetSpec,

@@ -38,12 +38,14 @@ uv pip install "segresnet-mlx>=0.4.1"
 ## Run
 
 ```python
-from segresnet_mlx.medmlx import renal_cect
+from segresnet_mlx import segment
 
-result = renal_cect(
-    arterial_path="arterial.nii.gz",
-    venous_path="venous.nii.gz",
-    excretory_path="excretory.nii.gz",
+result = segment(
+    image_paths={
+        "arterial": "arterial.nii.gz",
+        "venous": "venous.nii.gz",
+        "excretory": "excretory.nii.gz",
+    },
     output_dir="out",
 )
 print(result["outputs"]["mask"])
@@ -51,18 +53,17 @@ print(result["outputs"]["mask"])
 
 Weights download from [`MedMLX/segresnet-renal-cect-mlx`](https://huggingface.co/MedMLX/segresnet-renal-cect-mlx)
 on first use; `medmlx setup segresnet-renal-cect` downloads ahead of time. For local
-weights, pass `weights_path` as a folder containing `segresnet-renal-cect.safetensors`
-or as the file itself.
+weights, pass `weights_path` as a folder containing `segresnet-renal-cect.safetensors`.
 
 ### Inputs and outputs
 
 | Argument | Meaning |
 | --- | --- |
-| `arterial_path`, `venous_path`, `excretory_path` | Arterial, venous and excretory CT in NIfTI, on one voxel grid |
-| `output_dir` | Directory for `renalStructures_CECT_segmentation_mask.nii.gz`; created if missing |
-| `weights_path` | Optional `.safetensors` file or a folder containing it |
+| `image_paths` | `{"arterial": ..., "venous": ..., "excretory": ...}`: CT phases in NIfTI, on one voxel grid |
+| `output_dir` | Directory for `mask.nii.gz`; created if missing |
+| `weights_path` | Optional folder containing `segresnet-renal-cect.safetensors` |
 | `overwrite` | `False` by default; an existing mask is replaced only when `True` |
-| `arithmetic_profile` | `torch-order-fp32` (default), `compensated-fp32` or `compensated-fp48` |
+| `precision` | `torch-order-fp32` (default), `compensated-fp32` or `compensated-fp48` |
 | `streaming` | `False` by default; `True` keeps blending intermediates and logits in temporary mapped files |
 | `scratch_dir` | Parent directory for the streaming files; defaults to the system temporary directory |
 
@@ -76,19 +77,18 @@ vertebral bodies or liver as neoplasm.
 The mask is float32 with labels 1 artery, 2 vein, 3 ureter, 4 neoplasm and
 5 parenchyma; where classes overlap, the lower label wins.
 
-| `arithmetic_profile` | Arithmetic |
+| `precision` | Arithmetic |
 | :--- | :--- |
 | `torch-order-fp32` (default) | The default float32 profile |
 | `compensated-fp32` | Convolution and GroupNorm accumulate in paired Metal floats, with float32 layer outputs |
 | `compensated-fp48` | The pairs carry through the hidden layers and stitching runs in float64 on the host |
 
-The runner returns `{"outputs": {"mask": path}, "artifacts": {"mask": ...}, "details": {...}}`: the `mask` artifact names the labels and the input grid it is on, and `details` holds run metadata.
+`segment` returns `{"outputs": {"mask": path}, "artifacts": {"mask": ...}, "details": {...}}`: the `mask` artifact names the labels and the input grid it is on, and `details` holds run metadata.
 Invalid inputs raise `InvalidInputError`; missing or mismatched weights raise
 `AssetNotReadyError`; inference failures raise `ModelExecutionError`.
 
 Streaming files are removed on success and failure. The final label volume stays in
-memory. `run(bundle="renalStructures_CECT_segmentation", weights_path=...)` takes the
-same inputs with an explicit `.safetensors` file.
+memory.
 
 ### Python API
 
@@ -96,10 +96,10 @@ same inputs with an explicit `.safetensors` file.
 from pathlib import Path
 
 import numpy as np
-from segresnet_mlx import BUNDLE_CONFIGS, SegResNetSpec, forward_patch, load_model, predict_logits
+from segresnet_mlx import BUNDLE_CONFIGS, SegResNetSpec, forward_patch, load_network, predict_logits
 
 spec = SegResNetSpec(3, 6, 32, upsample_mode="deconv")  # renal CECT network
-network = load_model(Path("segresnet-renal-cect.safetensors"), spec=spec)
+network = load_network(Path("segresnet-renal-cect.safetensors"), spec=spec)
 patch = np.zeros((1, 3, 32, 32, 32), dtype=np.float32)
 logits = forward_patch(network, patch)  # float32 NCDHW -> float32 NumPy logits
 config = BUNDLE_CONFIGS["renalStructures_CECT_segmentation"]
@@ -109,7 +109,7 @@ volume_logits = predict_logits(patch, config, network=network)  # stitched slidi
 - `forward_patch` needs spatial sizes divisible by `2 ** len(spec.blocks_up)`.
 - `predict_logits` takes preprocessed arrays of any size and stitches the bundle's
   sliding windows. Neither normalizes intensities, applies activations or maps labels.
-- `load_model` checks tensor names, shapes and finite float32 values against
+- `load_network` checks tensor names, shapes and finite float32 values against
   `required_shapes(spec)`.
 - `WindowTelemetry` and `BundlePredictor` record bounded progress and timing.
 - Inference requires Apple Silicon with Metal.

@@ -9,13 +9,13 @@ from fixture_contracts import ModelFixture
 from medmlx_core.errors import InvalidInputError
 from reference_data import mlx_weights
 
-from segresnet_mlx import load_model
+from segresnet_mlx import load_network
 
 pytestmark = pytest.mark.mlx
 
 
 @pytest.mark.parametrize("corruption", ["format", "keys", "shape", "dtype", "nan", "inf"])
-def test_load_model_rejects_invalid_checkpoints(
+def test_load_network_rejects_invalid_checkpoints(
     no_decoder_reference: ModelFixture, tmp_path: Path, corruption: str
 ) -> None:
     """Reject non-safetensors files and missing, wrong-shaped, or non-float32 parameters."""
@@ -37,4 +37,4 @@ def test_load_model_rejects_invalid_checkpoints(
     if corruption != "format":
         mx.save_safetensors(str(destination), weights)
     with pytest.raises(InvalidInputError):
-        load_model(destination, spec=spec)
+        load_network(destination, spec=spec)

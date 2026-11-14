@@ -18,6 +18,7 @@ from segresnet_mlx._records import RunResult, Runtime
 if TYPE_CHECKING:
     from segresnet_mlx.network import SegResNet
 
+import medmlx_core.weights as core_weights
 import numpy as np
 import pytest
 from medmlx_core.errors import InvalidInputError
@@ -26,10 +27,10 @@ from reference_data import bundle_fixture, mlx_weights, segresnet_spec, write_in
 
 from segresnet_mlx import medmlx
 from segresnet_mlx._nifti import nib
-from segresnet_mlx.medmlx import BUNDLES, run
+from segresnet_mlx.medmlx import BUNDLES, OUTPUT_NAME, WEIGHTS_NAME, segment
 
 RENAL = "renalStructures_CECT_segmentation"
-ROLES = ("arterial_path", "venous_path", "excretory_path")
+CHANNELS = ("arterial", "venous", "excretory")
 
 
 @pytest.mark.parametrize(
@@ -52,17 +53,18 @@ def test_registered_runners_reject_arguments_before_downloading(
         """Fail the test if weights are fetched before the arguments are checked."""
         pytest.fail(f"downloaded {model_id} before checking arguments")
 
-    monkeypatch.setattr(medmlx, "weights_dir", download)
+    monkeypatch.setattr(core_weights, "weights_dir", download)
     output = tmp_path / "out"
-    arguments: dict[str, object] = {"output_dir": str(output)}
-    for role in ROLES:
-        path = tmp_path / f"{role}.nii.gz"
+    image_paths: dict[str, str] = {}
+    for channel in CHANNELS:
+        path = tmp_path / f"{channel}.nii.gz"
         path.write_bytes(b"read only after the arguments are checked")
-        arguments[role] = str(path)
+        image_paths[channel] = str(path)
+    arguments: dict[str, object] = {"output_dir": str(output), "image_paths": image_paths}
     if problem == "absent-path":
-        arguments[ROLES[0]] = str(tmp_path / "absent.nii.gz")
+        image_paths[CHANNELS[0]] = str(tmp_path / "absent.nii.gz")
     elif problem == "unknown-profile":
-        arguments["arithmetic_profile"] = "fp16"
+        arguments["precision"] = "fp16"
     elif problem == "non-bool":
         arguments["overwrite"] = "false"
     elif problem == "non-bool-streaming":
@@ -71,9 +73,9 @@ def test_registered_runners_reject_arguments_before_downloading(
         arguments.update(streaming=True, scratch_dir=str(tmp_path / "missing-scratch"))
     else:
         output.mkdir()
-        (output / f"{RENAL}_mask.nii.gz").write_bytes(b"previous")
+        (output / OUTPUT_NAME).write_bytes(b"previous")
     # Arguments are deliberately mistyped, so call through an untyped signature.
-    runner: Callable[..., RunResult] = medmlx.renal_cect
+    runner: Callable[..., RunResult] = segment
     with pytest.raises(InvalidInputError):
         runner(**arguments)
 
@@ -89,12 +91,13 @@ def test_registered_streaming_runner_preserves_upstream_labels_and_cleans_worksp
     arrays, _ = bundle_fixture("renal")
     spec = segresnet_spec(json.loads(str(arrays["runner::spec"])))
     monkeypatch.setitem(BUNDLES, RENAL, replace(BUNDLES[RENAL], spec=spec, roi_size=(8, 8, 8)))
-    weights = tmp_path / "seeded.safetensors"
-    mx.save_safetensors(str(weights), mlx_weights(arrays, mx, "runner::weight::"))
+    weights = tmp_path / "weights"
+    weights.mkdir()
+    mx.save_safetensors(str(weights / WEIGHTS_NAME), mlx_weights(arrays, mx, "runner::weight::"))
     scratch = tmp_path / "scratch"
     scratch.mkdir()
-    result = medmlx.renal_cect(
-        **write_inputs(tmp_path, "renal", "axis"),
+    result = segment(
+        image_paths=write_inputs(tmp_path, "renal", "axis"),
         weights_path=str(weights),
         output_dir=str(tmp_path / "out"),
         streaming=True,
@@ -107,7 +110,7 @@ def test_registered_streaming_runner_preserves_upstream_labels_and_cleans_worksp
     assert result["details"].get("streaming") is True
     _, artifacts = validate_outputs(result)
     assert artifacts["mask"]["kind"] == "label_map"
-    assert artifacts["mask"].get("grid_of") == "arterial_path"
+    assert artifacts["mask"].get("grid_of") == "image_paths.arterial"
     assert artifacts["mask"].get("labels") == [
         {"value": value, "name": name} for value, name in BUNDLES[RENAL].labels.items()
     ]
@@ -144,13 +147,13 @@ def test_runner_matches_the_original_upstream_pipeline(
         return output, runtime
 
     monkeypatch.setattr(medmlx, "predict", measured)
-    weights = tmp_path / "seeded.safetensors"
-    mx.save_safetensors(str(weights), mlx_weights(arrays, mx, f"{suffix}::weight::"))
-    result = run(
-        bundle=RENAL,
+    weights = tmp_path / "weights"
+    weights.mkdir()
+    mx.save_safetensors(str(weights / WEIGHTS_NAME), mlx_weights(arrays, mx, f"{suffix}::weight::"))
+    result = segment(
+        image_paths=write_inputs(tmp_path, "renal", case),
         weights_path=str(weights),
         output_dir=str(tmp_path / "out"),
-        **write_inputs(tmp_path, "renal", case),
     )
     written = nib.load(result["outputs"]["mask"])
     # The label map must agree exactly, including class priority and threshold ties.
