@@ -189,7 +189,7 @@ wheels = [
 
 [[package]]
 name = "medmlx-core"
-version = "0.3.0"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -197,9 +197,9 @@ dependencies = [
     { name = "mlx" },
     { name = "numpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/29/4c02d66a8858925c73503243c96d65a2947c9c296f1cd42d7e334e85382c/medmlx_core-0.3.0.tar.gz", hash = "sha256:e59141ec52ad029df863440d6271332179c84559b530008315521937809a4ada", size = 73773, upload-time = "2026-11-14T20:05:23.083Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/db/546cc6d3511cca9248aa0146daabb5bc4af8093f2a9eb4d3a7589857d737/medmlx_core-0.3.1.tar.gz", hash = "sha256:ddfb852659a6d20669d6eefd92331b1ea770f958ba24c52863c75b182fe10944", size = 75488, upload-time = "2026-11-15T01:59:01.301Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5f/0f/d1cdd31b9c35c03b7b417fc23b6e74eac82b33972d9f854d1cb1dae06707/medmlx_core-0.3.0-py3-none-any.whl", hash = "sha256:4d971634ead3b53a39222cf64b8e019148dfd48bc2f99422640f35d9a875a2a5", size = 90976, upload-time = "2026-11-14T20:05:22.039Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/30/3248054523a8b7c963f5edbb8ddd4d487a61731cb3a794eafdbad48fbc3a/medmlx_core-0.3.1-py3-none-any.whl", hash = "sha256:d3a4fec93b5eb3d6238bf36f91f23f1fc97149ecfe8461a15e8e5f154d3c78e1", size = 93045, upload-time = "2026-11-15T01:58:59.968Z" },
 ]
 
 [[package]]
@@ -379,7 +379,7 @@ wheels = [
 
 [[package]]
 name = "segresnet-mlx"
-version = "0.4.1"
+version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "medmlx-core" },
@@ -402,7 +402,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6,<7" },
-    { name = "medmlx-core", specifier = ">=0.3,<0.4" },
+    { name = "medmlx-core", specifier = ">=0.3.1,<0.4" },
     { name = "mlx", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'", specifier = "==0.32.4" },
     { name = "monai", marker = "extra == 'dev'", specifier = "==1.6.1" },
     { name = "nibabel", specifier = ">=5.3,<6" },
