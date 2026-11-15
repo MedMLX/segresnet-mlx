@@ -27,7 +27,7 @@ from reference_data import bundle_fixture, mlx_weights, segresnet_spec, write_in
 
 from segresnet_mlx import medmlx
 from segresnet_mlx._nifti import nib
-from segresnet_mlx.medmlx import BUNDLES, OUTPUT_NAME, WEIGHTS_NAME, segment
+from segresnet_mlx.medmlx import BUNDLES, OUTPUT_NAME, WEIGHTS_NAME, run
 
 RENAL = "renalStructures_CECT_segmentation"
 CHANNELS = ("arterial", "venous", "excretory")
@@ -75,7 +75,7 @@ def test_registered_runners_reject_arguments_before_downloading(
         output.mkdir()
         (output / OUTPUT_NAME).write_bytes(b"previous")
     # Arguments are deliberately mistyped, so call through an untyped signature.
-    runner: Callable[..., RunResult] = segment
+    runner: Callable[..., RunResult] = run
     with pytest.raises(InvalidInputError):
         runner(**arguments)
 
@@ -96,7 +96,7 @@ def test_registered_streaming_runner_preserves_upstream_labels_and_cleans_worksp
     mx.save_safetensors(str(weights / WEIGHTS_NAME), mlx_weights(arrays, mx, "runner::weight::"))
     scratch = tmp_path / "scratch"
     scratch.mkdir()
-    result = segment(
+    result = run(
         image_paths=write_inputs(tmp_path, "renal", "axis"),
         weights_path=str(weights),
         output_dir=str(tmp_path / "out"),
@@ -150,7 +150,7 @@ def test_runner_matches_the_original_upstream_pipeline(
     weights = tmp_path / "weights"
     weights.mkdir()
     mx.save_safetensors(str(weights / WEIGHTS_NAME), mlx_weights(arrays, mx, f"{suffix}::weight::"))
-    result = segment(
+    result = run(
         image_paths=write_inputs(tmp_path, "renal", case),
         weights_path=str(weights),
         output_dir=str(tmp_path / "out"),

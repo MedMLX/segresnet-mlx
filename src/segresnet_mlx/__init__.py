@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from segresnet_mlx.inference import forward_patch as forward_patch
-    from segresnet_mlx.medmlx import segment as segment
+    from segresnet_mlx.medmlx import run as run
     from segresnet_mlx.network import SegResNet as SegResNet
     from segresnet_mlx.predictor import BUNDLE_CONFIGS as BUNDLE_CONFIGS
     from segresnet_mlx.predictor import BundlePredictor as BundlePredictor
@@ -33,7 +33,7 @@ _EXPORTS = {
     "load_network": "segresnet_mlx.weights",
     "predict_logits": "segresnet_mlx.predictor",
     "required_shapes": "segresnet_mlx.weights",
-    "segment": "segresnet_mlx.medmlx",
+    "run": "segresnet_mlx.medmlx",
 }
 
 __all__ = [
@@ -47,7 +47,7 @@ __all__ = [
     "load_network",
     "predict_logits",
     "required_shapes",
-    "segment",
+    "run",
 ]
 
 

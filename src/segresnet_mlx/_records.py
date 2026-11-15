@@ -49,7 +49,7 @@ class Seconds(TypedDict):
 
 
 class Details(TypedDict):
-    """The ``details`` block of ``segment``'s result.
+    """The ``details`` block of ``run``'s result.
 
     ``labels`` maps each label value (as a string) to its name and ``labels_present``
     lists the values found in the written mask. ``input_shape`` is the first input's
@@ -75,7 +75,7 @@ class Details(TypedDict):
     requires_human_review: bool
 
 
-# Result of ``segresnet_mlx.segment``: ``outputs["mask"]`` is the mask path.
+# Result of ``segresnet_mlx.run``: ``outputs["mask"]`` is the mask path.
 #
 # ``artifacts["mask"]`` describes the mask file (label map, labels, source grid).
 type RunResult = _RunResult[Details]

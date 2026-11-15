@@ -38,9 +38,9 @@ uv pip install "segresnet-mlx>=0.4.1"
 ## Run
 
 ```python
-from segresnet_mlx import segment
+from segresnet_mlx import run
 
-result = segment(
+result = run(
     image_paths={
         "arterial": "arterial.nii.gz",
         "venous": "venous.nii.gz",
@@ -83,7 +83,7 @@ The mask is float32 with labels 1 artery, 2 vein, 3 ureter, 4 neoplasm and
 | `compensated-fp32` | Convolution and GroupNorm accumulate in paired Metal floats, with float32 layer outputs |
 | `compensated-fp48` | The pairs carry through the hidden layers and stitching runs in float64 on the host |
 
-`segment` returns `{"outputs": {"mask": path}, "artifacts": {"mask": ...}, "details": {...}}`: the `mask` artifact names the labels and the input grid it is on, and `details` holds run metadata.
+`run` returns `{"outputs": {"mask": path}, "artifacts": {"mask": ...}, "details": {...}}`: the `mask` artifact names the labels and the input grid it is on, and `details` holds run metadata.
 Invalid inputs raise `InvalidInputError`; missing or mismatched weights raise
 `AssetNotReadyError`; inference failures raise `ModelExecutionError`.
 

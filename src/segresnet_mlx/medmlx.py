@@ -77,7 +77,7 @@ RENAL_CECT_MODEL = {
     "id": "segresnet-renal-cect",
     "label": "SegResNet renal CECT",
     "task": "segmentation",
-    "run": "segresnet_mlx.medmlx:segment",
+    "run": "segresnet_mlx.medmlx:run",
     # Measured MLX peak for a 478x277x161 three-phase CT; larger inputs need more.
     "peak_memory_gb": 4.1,
     "summary": "Renal structures from arterial, venous and excretory phase CT.",
@@ -124,7 +124,7 @@ class SpatialInverse:
     affine: Float64Array
 
 
-def segment(
+def run(
     *,
     image_paths: Mapping[str, PathLike],
     output_dir: PathLike,
@@ -278,7 +278,7 @@ def _check_arguments(
     streaming: bool,
     scratch_dir: PathLike | None,
 ) -> tuple[dict[str, Path], Path]:
-    """Check every ``segment`` argument before weights, inputs or MLX are loaded.
+    """Check every ``run`` argument before weights, inputs or MLX are loaded.
 
     Returns the input files by channel, in network order, and the mask path.
     """
@@ -512,4 +512,4 @@ def _validate_mask(mask: MaskArray, reference: Volume, config: Bundle) -> None:
         raise ModelExecutionError("SegResNet exported labels outside the bundle contract")
 
 
-__all__ = ["BUNDLES", "OUTPUT_NAME", "RENAL_CECT_MODEL", "segment"]
+__all__ = ["BUNDLES", "OUTPUT_NAME", "RENAL_CECT_MODEL", "run"]
