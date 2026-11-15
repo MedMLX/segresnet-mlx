@@ -19,6 +19,9 @@ if TYPE_CHECKING:
     class WorkspaceOptions(TypedDict, total=False):
         workspace: VolumeWorkspace
 
+    class AccumulationOptions(TypedDict, total=False):
+        accumulation: Literal["mlx"]
+
     class MLX(MlxRuntime, Protocol):
         all = staticmethod(mx.all)
         isfinite = staticmethod(mx.isfinite)
@@ -35,14 +38,14 @@ if TYPE_CHECKING:
             inputs: Float32Array,
             roi_size: Sequence[int],
             sw_batch_size: int,
-            predictor: Callable[[Float32Array | Array], Float32Array]
-            | Callable[[Float32Array | Array, list[list[slice]]], Float32Array],
+            predictor: Callable[[Array], Array] | Callable[[Float32Array], Float32Array],
             *,
             overlap: float,
             mode: str,
             padding_mode: str,
             with_coord: bool = False,
-            predictor_input: Literal["numpy"],
+            predictor_input: Literal["mlx", "numpy"],
+            accumulation: Literal["mlx", "numpy"] = "numpy",
             preserve_window_strides: bool = False,
             workspace: VolumeWorkspace | None = None,
         ) -> Float32Array:

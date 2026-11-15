@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
-from contextlib import nullcontext
+from collections.abc import Callable, Generator
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from segresnet_mlx._records import BundleConfig, InfererConfig
 from segresnet_mlx._runtime import import_mlx
@@ -15,7 +15,13 @@ if TYPE_CHECKING:
     from ignite.engine import Engine, Events
     from medmlx_core.volume_workspace import VolumeWorkspace
 
-    from segresnet_mlx._types import MLX, Array, CoreSlidingWindow, WorkspaceOptions
+    from segresnet_mlx._types import (
+        MLX,
+        AccumulationOptions,
+        Array,
+        CoreSlidingWindow,
+        WorkspaceOptions,
+    )
     from segresnet_mlx.network import SegResNet
 
 import numpy as np
@@ -75,10 +81,10 @@ BUNDLE_CONFIGS = {
 
 
 class BundlePredictor:
-    """Synchronized MLX window callback with an injected network.
+    """Native MLX window callback with an injected network.
 
-    ``forward`` retains the MLX-array callback API; ``predict_logits`` passes
-    synchronized NumPy logits directly to the host stitcher. Telemetry
+    ``forward`` retains the MLX-array callback API; ``predict_logits`` exports
+    host logits or opts into FP32 device slab stitching. Telemetry
     lifecycle remains caller-owned here, allowing an engine to finish only after
     postprocessing. The module-level ``predict_logits`` owns a direct-call session.
     """
@@ -107,10 +113,10 @@ class BundlePredictor:
                         "network_device": str(self.mx.default_device()),
                         "transforms_and_stitching_device": "cpu",
                         "compile": False,
-                        "synchronization": "mx.eval and mx.synchronize before host export",
+                        "synchronization": "mx.eval; global synchronization only for telemetry",
                         "window_timing_scope": (
-                            "synchronized network, MLX input creation and host export; "
-                            "excludes validation and telemetry"
+                            "synchronized network and MLX input creation; host export only "
+                            "for host-output callbacks; excludes validation and telemetry"
                         ),
                         "peak_memory_scope": "predictor lifetime, including warmup",
                     }
@@ -132,35 +138,64 @@ class BundlePredictor:
     def forward(self, values: HostArray | Array) -> Array:
         """Run one finite float32 window and return its logits as an MLX array.
 
-        The logits are exported to host NumPy for the finite check and timing, then
-        wrapped again as an MLX array for callers that expect one.
+        Device inputs and logits stay in MLX; finite checks read one Boolean.
         """
         try:
-            return cast(ArrayFactory, self.mx.array)(self._forward_window(values))
+            if isinstance(values, self.mx.array):
+                if values.dtype != self.mx.float32 or not bool(
+                    self.mx.all(self.mx.isfinite(values)).item()
+                ):
+                    raise InvalidInputError(f"{self.network_label} input must be finite float32")
+                validated = values
+            else:
+                validated = self._host_input(values)
+            with self._measure_window():
+                device_input = (
+                    validated if isinstance(validated, self.mx.array)
+                    else cast(ArrayFactory, self.mx.array)(validated)
+                )
+                return self._forward_validated_mlx(device_input)
         except BaseException as error:
             if self.telemetry is not None:
                 self.telemetry.fail(error)
             raise
 
     def _forward_window(self, values: HostArray | Array) -> Float32Array:
-        """Run and synchronize one window, returning finite host logits."""
-        host = self._host_input(values)
+        """Validate one standalone window and explicitly export finite host logits."""
+        return self._forward_validated_window(self._host_input(values))
+
+    def _forward_validated_mlx(self, values: Array) -> Array:
+        """Run validated float32 MLX input and check logits on device."""
+        logits = self.network(values)
+        finite = self.mx.all(self.mx.isfinite(logits))
+        self.mx.eval(logits, finite)
+        if not bool(finite.item()):
+            raise RuntimeError(f"{self.network_label} produced non-finite logits")
+        return logits
+
+    @contextmanager
+    def _measure_window(self) -> Generator[None]:
+        """Synchronize and time completed window work only when telemetry is active."""
+        if self.telemetry is None:
+            yield
+            return
         self.mx.synchronize()
         started = time.perf_counter()
-        result = self.network(cast(ArrayFactory, self.mx.array)(host))
-        self.mx.eval(result)
+        yield
         self.mx.synchronize()
-        output = cast(Float32Array, np.array(result))
         elapsed = time.perf_counter() - started
-        if not np.isfinite(output).all():
-            raise RuntimeError(f"{self.network_label} produced non-finite logits")
-        if self.telemetry is not None:
-            self.telemetry.observe(elapsed, self.mx.get_peak_memory())
-        # The allocator cache is kept across windows: every window has the same
-        # shapes, so later windows reuse the buffers instead of reallocating
-        # them. ``predict_logits`` releases the cache once the volume is done.
-        del result
-        return output
+        self.telemetry.observe(elapsed, self.mx.get_peak_memory())
+
+    def _forward_validated_window(self, values: Float32Array) -> Float32Array:
+        """Export one already-validated host patch without rescanning its input."""
+        with self._measure_window():
+            logits = self._forward_validated_mlx(cast(ArrayFactory, self.mx.array)(values))
+            return cast(Float32Array, np.array(logits))
+
+    def _forward_device_window(self, values: Array) -> Array:
+        """Run a patch of a validated volume, retaining its logits on device."""
+        with self._measure_window():
+            return self._forward_validated_mlx(values)
 
     def _host_input(self, values: HostArray | Array) -> Float32Array:
         """Admit finite float32 input as a NumPy array or raise an input error."""
@@ -175,6 +210,7 @@ class BundlePredictor:
         configuration: SlidingWindowConfig,
         *,
         workspace: VolumeWorkspace | None = None,
+        accumulation: Literal["numpy", "mlx"] = "numpy",
     ) -> Float32Array:
         """Stitch preprocessed ``(N, C, D, H, W)`` float32 data into full-volume logits.
 
@@ -182,6 +218,10 @@ class BundlePredictor:
         size. Volumes smaller than ``roi_size`` are padded and cropped back. Window
         placement and blending follow MONAI's ``SlidingWindowInferer`` via the
         shared core. Callers own telemetry completion.
+
+        ``accumulation='mlx'`` opts into FP32 Metal slabs and completed-slab
+        export. The default uses host blending; the wide-precision API remains
+        a separate float64 host route.
 
         Raises:
             InvalidInputError: If ``values`` is not finite float32.
@@ -194,10 +234,17 @@ class BundlePredictor:
         ).sliding_window_inference
 
         try:
+            if accumulation not in {"numpy", "mlx"}:
+                raise ValueError("accumulation must be 'numpy' or 'mlx'")
             host = self._host_input(values)
             require_ncdhw(host, name="SegResNet input")
             if self.telemetry is not None:
-                self.telemetry.set_metadata({"sw_batch_size": configuration.sw_batch_size})
+                self.telemetry.set_metadata({
+                    "sw_batch_size": configuration.sw_batch_size,
+                    "transforms_and_stitching_device": (
+                        "cpu transforms, Metal stitching" if accumulation == "mlx" else "cpu"
+                    ),
+                })
             if (
                 workspace is None
                 and host.shape[0] == 1
@@ -227,20 +274,25 @@ class BundlePredictor:
                 )
                 # One constant-weight window contributes its logits exactly once;
                 # blending would only copy and divide the same full volume.
-                return self._forward_window(window)[(slice(None), slice(None), *crop)]
+                return self._forward_validated_window(window)[(slice(None), slice(None), *crop)]
+            accumulation_options: AccumulationOptions = (
+                {"accumulation": "mlx"} if accumulation == "mlx" else {}
+            )
             return sliding_window_inference(
                 host,
                 configuration.roi_size,
                 configuration.sw_batch_size,
-                self._forward_window,
+                self._forward_device_window if accumulation == "mlx"
+                else self._forward_validated_window,
                 overlap=configuration.overlap,
                 mode=configuration.mode,
                 padding_mode=configuration.padding_mode,
-                predictor_input="numpy",
+                predictor_input="mlx" if accumulation == "mlx" else "numpy",
                 # MLX reduction kernels depend on layout. Match MONAI's sliced
                 # batch-one input without a second padded volume or patch copy.
                 preserve_window_strides=True,
                 workspace=workspace,
+                **accumulation_options,
             )
         except BaseException as error:
             if self.telemetry is not None:
@@ -256,16 +308,18 @@ def predict_logits(
     *,
     network: Callable[[Array], Array],
     telemetry: WindowTelemetry | None = None,
+    accumulation: Literal["numpy", "mlx"] = "numpy",
 ) -> Float32Array:
     """Return float32 NumPy NCDHW logits, completing optional window telemetry.
 
     ``values`` is preprocessed, finite float32 ``(N, C, D, H, W)``; the result has the
     same spatial size. Input preparation, activation, label mapping, image I/O and QC
-    are external.
+    are external. ``accumulation='mlx'`` opts into FP32 Metal slab blending and
+    requires a shared core with that accumulation option.
     """
     with telemetry.session() if telemetry is not None else nullcontext():
         predictor = BundlePredictor(network, telemetry=telemetry)
-        return predictor.predict_logits(values, configuration)
+        return predictor.predict_logits(values, configuration, accumulation=accumulation)
 
 
 def predict_wide_logits(
