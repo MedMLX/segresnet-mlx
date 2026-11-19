@@ -397,20 +397,51 @@ def _fma_array(
     return total + (sum_error + error)
 
 
+def _split[T: (Float64Array, np.float64)](value: T) -> tuple[T, T]:
+    """Split a float64 value into high and low words for Dekker multiplication."""
+    scaled = 134217729.0 * value
+    high = scaled - (scaled - value)
+    return cast(T, high), cast(T, value - high)
+
+
 def _product_error(left: Float64Array, right: Float64Array, product: Float64Array) -> Float64Array:
     """Dekker's exact remainder ``left * right - product``."""
-
-    def split[T: (Float64Array, np.float64)](value: T) -> tuple[T, T]:
-        """Split a float64 value into high and low words for Dekker multiplication."""
-        scaled = 134217729.0 * value
-        high = scaled - (scaled - value)
-        return cast(T, high), cast(T, value - high)
-
-    left_high, left_low = split(left)
-    right_high, right_low = split(right)
+    left_high, left_low = _split(left)
+    right_high, right_low = _split(right)
     return (
         ((left_high * right_high - product) + left_high * right_low) + left_low * right_high
     ) + left_low * right_low
+
+
+def _accumulate_corner(
+    values: Float64Array, weight: Float64Array, addend: Float64Array
+) -> Float64Array:
+    """``_fma_array(values, weight, addend)`` for one trilinear corner, bitwise equal.
+
+    ``values`` are float32 voxels widened to float64 and ``weight`` is a product of
+    non-negative corner weights, possibly broadcast over the channel axis. A float32
+    value has at most 24 significant bits, so Dekker's split returns it unchanged as
+    its high word with a +0 low word. The two low-word products of ``_product_error``
+    are then zeros, the first of them +0, and adding them only turns a -0 remainder
+    into +0, which the ``+ 0.0`` below reproduces. The weight is split once at its own
+    shape instead of per channel. Every other operation and its order are those of
+    ``_fma_array``.
+    """
+    product = values * weight
+    if not np.any(weight) or not np.any(values):
+        return product + addend
+    weight_high, weight_low = _split(weight)
+    error = values * weight_high
+    error -= product
+    error += values * weight_low
+    error += 0.0
+    total = product + addend
+    virtual = total - product
+    sum_error = product - (total - virtual)
+    sum_error += addend - virtual
+    sum_error += error
+    total += sum_error
+    return total
 
 
 def _source_index(coordinate: Float64Array, size: int) -> Float64Array:
@@ -441,6 +472,20 @@ _CORNERS = (
 )
 
 
+def _depth_planes(data: Float32Array, index: Int64Array) -> Float32Array:
+    """``data.take(index, axis=1)`` without copying a non-contiguous ``data`` in full.
+
+    ``ndarray.take`` first makes its source C-contiguous. Logits cropped from a padded
+    window (a volume smaller than the ROI on one axis) are a strided view, so every
+    block would copy the whole volume. Gathering from the block's own range of planes
+    copies only those planes.
+    """
+    if data.flags.c_contiguous:
+        return data.take(index, axis=1)
+    first = int(index.min())
+    return data[:, first : int(index.max()) + 1].take(index - first, axis=1)
+
+
 def _sample_separable(
     data: Float32Array,
     gx: Float64Array,
@@ -463,18 +508,22 @@ def _sample_separable(
         (None, None, slice(None)),
     )
     result = np.zeros((data.shape[0], len(gz), len(gy), len(gx)), dtype=np.float64)
+    # Each axis has two corner sides: gather the depth planes and then their rows
+    # once per side instead of once per corner.
+    planes = [_depth_planes(data, np.minimum(z_index[side], depth - 1)) for side in (0, 1)]
+    rows = {
+        (cz, cy): planes[cz].take(np.minimum(y_index[cy], height - 1), axis=2)
+        for cz in (0, 1)
+        for cy in (0, 1)
+    }
     for cz, cy, cx in _CORNERS:
         # (x * y) * z, left to right, as in grid_sampler_3d_cpu_impl.
         weight = (x_weight[cx][along_w] * y_weight[cy][along_h]) * z_weight[cz][along_d]
         zi, yi, xi = z_index[cz], y_index[cy], x_index[cx]
-        values = (
-            data.take(np.minimum(zi, depth - 1), axis=1)
-            .take(np.minimum(yi, height - 1), axis=2)
-            .take(np.minimum(xi, width - 1), axis=3)
-            .astype(np.float64)
-        )
+        values = rows[cz, cy].take(np.minimum(xi, width - 1), axis=3).astype(np.float64)
         inside = ((zi < depth)[along_d] & (yi < height)[along_h]) & (xi < width)[along_w]
-        result = np.where(inside, _fma_array(values, weight, result), result)
+        accumulated = _accumulate_corner(values, weight, result)
+        result = accumulated if inside.all() else np.where(inside, accumulated, result)
     return result
 
 
@@ -503,5 +552,6 @@ def _sample(
             np.minimum(yi, height - 1),
             np.minimum(xi, width - 1),
         ].astype(np.float64)
-        result = np.where(inside, _fma_array(values, weight, result), result)
+        accumulated = _accumulate_corner(values, weight, result)
+        result = accumulated if inside.all() else np.where(inside, accumulated, result)
     return result
