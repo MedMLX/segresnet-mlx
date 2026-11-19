@@ -22,7 +22,8 @@ licenses independently of the package source license.
 
 ## Example image
 
-`docs/example.png` shows model outputs over a brain MRI from the
-[Medical Segmentation Decathlon](http://medicaldecathlon.com/). The source image
-is shared under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/);
-the repository's Apache-2.0 license does not relicense it.
+`docs/example.png` shows model outputs over three-phase CT of case C3N-00380 from
+[CPTAC-CCRCC](https://doi.org/10.7937/k9/tcia.2018.oblamn27) (The Cancer Imaging
+Archive). The source images are shared under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the repository's
+Apache-2.0 license does not relicense them.
