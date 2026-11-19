@@ -444,7 +444,7 @@ def load_volume(path: Path, role: str) -> Volume:
     affine = np.asarray(image.affine, dtype=np.float64)
     if affine.shape != (4, 4) or not np.all(np.isfinite(affine)):
         raise InvalidInputError(f"{role} affine must be a finite 4x4 matrix")
-    data, reader_affine = transforms.image_arrays(image)
+    data, reader_affine = transforms.image_arrays(image, raw)
     if not np.all(np.isfinite(reader_affine)) or np.linalg.matrix_rank(reader_affine[:3, :3]) < 3:
         raise InvalidInputError(f"{role} affine must define an invertible 3D grid")
     shape = (int(raw.shape[0]), int(raw.shape[1]), int(raw.shape[2]))

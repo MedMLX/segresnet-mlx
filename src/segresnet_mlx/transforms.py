@@ -76,10 +76,14 @@ class Resampling:
     orig_size: tuple[int, ...]
 
 
-def image_arrays(image: NiftiImage) -> tuple[Float32Array, Float64Array]:
-    """MONAI's nibabel reader: correct the 3D header, then export float32 voxels."""
+def image_arrays(image: NiftiImage, voxels: HostArray) -> tuple[Float32Array, Float64Array]:
+    """Apply MONAI's header correction and export C-order float32 voxels.
+
+    The runner supplies the decoded voxels it validated. Header correction only
+    affects spatial metadata.
+    """
     correct_nifti_header(image)
-    data = np.asanyarray(image.dataobj, order="C").astype(np.float32, copy=False)
+    data = np.asarray(voxels, order="C").astype(np.float32, copy=False)
     return data, np.array(image.affine, dtype=np.float64, copy=True)
 
 
