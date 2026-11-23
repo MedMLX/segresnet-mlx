@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from fixture_contracts import ModelFixture
 
 from segresnet_mlx._arrays import NumericArray, as_numpy
 
 if TYPE_CHECKING:
-    from segresnet_mlx._types import MLX
+    from medmlx_core.typing import MlxRuntime
 
 import numpy as np
 import pytest
 from medmlx_core.ops import conv_transpose3d_ncdhw
-from medmlx_core.typing import ArrayFactory
 from reference_data import mlx_weights, network_fixture
 
 from segresnet_mlx import SegResNet, forward_patch
@@ -29,17 +28,17 @@ def _assert_float32_reference(actual: NumericArray, expected: NumericArray) -> N
     np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-6)
 
 
-def test_network_matches_upstream_reference(reference: ModelFixture, mx: MLX) -> None:
+def test_network_matches_upstream_reference(reference: ModelFixture, mx: MlxRuntime) -> None:
     """Compare seeded network logits with MONAI recordings."""
     spec, arrays, _ = reference
     network = SegResNet(spec, mlx_weights(arrays, mx), mx=mx)
-    output = network(cast(ArrayFactory, mx.array)(arrays["input"]))
+    output = network(mx.array(arrays["input"]))
     mx.eval(output)
     assert output.dtype == mx.float32
     _assert_float32_reference(as_numpy(output), arrays["output"])
 
 
-def test_single_patch_matches_upstream(no_decoder_reference: ModelFixture, mx: MLX) -> None:
+def test_single_patch_matches_upstream(no_decoder_reference: ModelFixture, mx: MlxRuntime) -> None:
     """Compare ``forward_patch`` logits with MONAI."""
     spec, arrays, _ = no_decoder_reference
     network = SegResNet(spec, mlx_weights(arrays, mx), mx=mx)
@@ -48,12 +47,12 @@ def test_single_patch_matches_upstream(no_decoder_reference: ModelFixture, mx: M
     _assert_float32_reference(output, arrays["output"])
 
 
-def test_encoder_downsampling_and_residuals_match_upstream(mx: MLX) -> None:
+def test_encoder_downsampling_and_residuals_match_upstream(mx: MlxRuntime) -> None:
     """Compare recorded encoder stages within their float32 tolerance."""
     spec, arrays, _ = network_fixture("segresnet_nontrainable")
     network = SegResNet(spec, mlx_weights(arrays, mx), mx=mx)
     initial = network.conv(
-        cast(ArrayFactory, mx.array)(arrays["input"]), "convInit.conv", padding=1
+        mx.array(arrays["input"]), "convInit.conv", padding=1
     )
     residual = network.residual(initial, "down_layers.0.1")
     downsampled = network.conv(residual, "down_layers.1.0.conv", padding=1, stride=2)
@@ -73,12 +72,12 @@ def test_encoder_downsampling_and_residuals_match_upstream(mx: MLX) -> None:
         )
 
 
-def test_shared_deconvolution_matches_upstream_reference(mx: MLX) -> None:
+def test_shared_deconvolution_matches_upstream_reference(mx: MlxRuntime) -> None:
     """Compare transpose convolution with the recorded MONAI output."""
     _, arrays, _ = network_fixture("segresnet_deconv")
     weights = mlx_weights(arrays, mx)
     output = conv_transpose3d_ncdhw(
-        cast(ArrayFactory, mx.array)(arrays["deconv_input"]),
+        mx.array(arrays["deconv_input"]),
         weights["up_samples.0.1.deconv.weight"],
         weights["up_samples.0.1.deconv.bias"],
         padding=0,

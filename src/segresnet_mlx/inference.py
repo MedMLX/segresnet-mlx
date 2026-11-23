@@ -6,9 +6,9 @@ from typing import cast
 
 import numpy as np
 from medmlx_core.errors import InvalidInputError
-from medmlx_core.typing import ArrayFactory
+from medmlx_core.typing import HostArray
 
-from segresnet_mlx._arrays import Float32Array, HostArray
+from segresnet_mlx._arrays import Float32Array
 from segresnet_mlx._runtime import import_mlx
 from segresnet_mlx.network import SegResNet
 
@@ -28,7 +28,7 @@ def forward_patch(network: SegResNet, values: HostArray) -> Float32Array:
         raise InvalidInputError("SegResNet input must be finite float32")
     mx = import_mlx()
     mx.synchronize()
-    result = network(cast(ArrayFactory, mx.array)(host))
+    result = network(mx.array(host))
     mx.eval(result)
     mx.synchronize()
     output = cast(Float32Array, np.array(result))

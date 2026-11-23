@@ -1,17 +1,18 @@
-"""NumPy ports of the MONAI 1.6 transforms used by the SegResNet renal CECT bundle.
+"""NumPy ports of the MONAI 1.6 transforms of the SegResNet renal CECT bundle that
+``medmlx_core.transforms`` does not provide bit-identically here.
 
-These functions reproduce the bundle's ``preprocessing`` and ``postprocessing``
-without Torch or MONAI: ``LoadImage`` (nibabel reader), ``Orientation``, ``Spacing``
-and its inverse, ``ScaleIntensityRange``, ``Activations(sigmoid=True)``,
-``AsDiscrete(threshold=0.5)``, ``MergeClassesd`` and the NIfTI writer. Spatial
-resampling follows MONAI's ``AffineTransform`` path, that is
-``torch.nn.functional.affine_grid`` and trilinear ``grid_sample`` with border padding
-and ``align_corners=False``, computed in float64 as ``Spacing`` does and returned as
-float32.
+``medmlx_core`` supplies header correction, ``Orientation``, forward ``Spacing``
+and ``ScaleIntensityRange``. This module keeps the inverse of ``Spacing``, which
+the bundle's ``Invertd`` replays, ``ConcatImages``, ``Activations(sigmoid=True)``,
+``AsDiscrete(threshold=0.5)`` and ``MergeClassesd``. Spatial resampling follows
+MONAI's ``AffineTransform`` path, that is ``torch.nn.functional.affine_grid`` and
+trilinear ``grid_sample`` with border padding and ``align_corners=False``, computed
+in float64 as ``Spacing`` does and returned as float32. Core's resampler rounds
+some inverse-grid voxels one float32 unit apart from this one, so the inverse
+stays local.
 
 Image arrays are channel-first float32 ``(C, *spatial)`` and affines are 4x4 float64
-voxel-to-world matrices as stored in the NIfTI header. Bundle ``pixdim`` targets
-are in mm; the runner validates spatial units, and these functions assume mm.
+voxel-to-world matrices in mm.
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ import os
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -35,37 +35,19 @@ from medmlx_core.geometry import (
     _mm as _mm,
 )
 from medmlx_core.geometry import (
-    affine_to_spacing as affine_to_spacing,
-)
-from medmlx_core.geometry import (
-    compute_shape_offset as compute_shape_offset,
-)
-from medmlx_core.geometry import (
     to_affine_nd as to_affine_nd,
 )
-from medmlx_core.geometry import (
-    zoom_affine as zoom_affine,
-)
 
-from segresnet_mlx._arrays import HostArray, Int64Array
-from segresnet_mlx._nifti import NiftiImage, nib
+from segresnet_mlx._arrays import Int64Array
 
 type Float32Array = npt.NDArray[np.float32]
 type Float64Array = npt.NDArray[np.float64]
 
 # monai.data.utils.AFFINE_TOL
 AFFINE_TOL = 1e-3
-_LABELS = (("L", "R"), ("P", "A"), ("I", "S"))
 # Bound the float64 corner arrays of all resampling blocks in flight together.
 _CHUNK_VOXELS = 1 << 20
 _THREADS = min(8, os.cpu_count() or 1)
-
-
-@dataclass(frozen=True, slots=True)
-class Orientation:
-    """What ``Orientation`` records for its inverse: the affine it started from."""
-
-    original_affine: Float64Array
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,102 +56,6 @@ class Resampling:
 
     src_affine: Float64Array
     orig_size: tuple[int, ...]
-
-
-def image_arrays(image: NiftiImage, voxels: HostArray) -> tuple[Float32Array, Float64Array]:
-    """Apply MONAI's header correction and export C-order float32 voxels.
-
-    The runner supplies the decoded voxels it validated. Header correction only
-    affects spatial metadata.
-    """
-    correct_nifti_header(image)
-    data = np.asarray(voxels, order="C").astype(np.float32, copy=False)
-    return data, np.array(image.affine, dtype=np.float64, copy=True)
-
-
-def correct_nifti_header(image: NiftiImage) -> None:
-    """Apply MONAI's spacing/form correction to a loaded 3D NIfTI, in memory."""
-    zooms = np.asarray(image.header.get_zooms())[:3]
-    if np.allclose(zooms, affine_to_spacing(image.affine, 3)):
-        return
-    sform, qform = image.get_sform(), image.get_qform()
-    sform_matches = np.allclose(affine_to_spacing(sform, 3), zooms)
-    qform_matches = np.allclose(affine_to_spacing(qform, 3), zooms)
-    if image.header["sform_code"] != 0:
-        if sform_matches:
-            return
-        if qform_matches:
-            image.set_sform(qform)
-            return
-    if image.header["qform_code"] != 0:
-        if qform_matches:
-            return
-        if sform_matches:
-            image.set_qform(sform)
-            return
-    image.header.set_zooms(affine_to_spacing(image.affine, 3))
-
-
-def orient(
-    data: Float32Array,
-    affine: Float64Array,
-    axcodes: str,
-) -> tuple[Float32Array, Float64Array, Orientation]:
-    """``Orientation(axcodes)`` on channel-first data; returns data, new affine, inverse."""
-    rank = data.ndim - 1
-    affine_np = np.array(affine, dtype=np.float64, copy=True)
-    affine_ = to_affine_nd(rank, affine_np)
-    source = nib.io_orientation(affine_)
-    target = nib.orientations.axcodes2ornt(axcodes[:rank], labels=_LABELS)
-    spatial_ornt = nib.orientations.ornt_transform(source, target)
-    xform = nib.orientations.inv_ornt_aff(spatial_ornt, data.shape[1:])
-    spatial_ornt[:, 0] += 1
-    spatial_ornt = np.concatenate([np.array([[0, 1]]), spatial_ornt])
-    axes = [axis for axis, flip in enumerate(spatial_ornt[:, 1]) if flip == -1]
-    full_transpose = np.arange(data.ndim)
-    full_transpose[: len(spatial_ornt)] = np.argsort(spatial_ornt[:, 0])
-    result = np.flip(data, tuple(axes)) if axes else data
-    if not np.all(full_transpose == np.arange(data.ndim)):
-        result = result.transpose(full_transpose)
-    new_affine = _mm(affine_np, to_affine_nd(len(affine_np) - 1, xform))
-    return np.ascontiguousarray(result), new_affine, Orientation(affine_np)
-
-
-def invert_orientation(
-    data: Float32Array,
-    affine: Float64Array,
-    record: Orientation,
-) -> tuple[Float32Array, Float64Array]:
-    """``Orientation.inverse``: reorient to the recorded original axis codes."""
-    axcodes = "".join(
-        cast(tuple[str, ...], nib.orientations.aff2axcodes(record.original_affine, labels=_LABELS))
-    )
-    result, new_affine, _ = orient(data, affine, axcodes)
-    return result, new_affine
-
-
-def spacing(
-    data: Float32Array,
-    affine: Float64Array,
-    pixdim: Sequence[float],
-    output_spatial_shape: Sequence[int] | None = None,
-) -> tuple[Float32Array, Float64Array, Resampling]:
-    """``Spacing(pixdim, mode="bilinear")`` with MONAI defaults (border, float64)."""
-    rank = data.ndim - 1
-    affine_ = to_affine_nd(rank, affine)
-    out_d = np.array(tuple(pixdim), dtype=np.float64)[:rank].copy()
-    if out_d.size < rank:
-        out_d = np.append(out_d, [out_d[-1]] * (rank - out_d.size))
-    original = affine_to_spacing(affine_, rank)
-    for index, current in enumerate(original):
-        target = out_d[index]
-        keep = (target - AFFINE_TOL) <= current <= (target + AFFINE_TOL)
-        out_d[index] = current if keep else target
-    new_affine = zoom_affine(affine_, out_d)
-    output_shape, offset = compute_shape_offset(data.shape[1:], affine_, new_affine)
-    new_affine[:rank, -1] = offset[:rank]
-    shape = list(output_shape) if output_spatial_shape is None else list(output_spatial_shape)
-    return spatial_resample(data, affine, new_affine, shape)
 
 
 def invert_spacing(
@@ -211,19 +97,6 @@ def spatial_resample(
 def concatenate(channels: Sequence[Float32Array]) -> Float32Array:
     """The renal bundle's ``ConcatImages`` (``np.concatenate`` along channels)."""
     return np.concatenate(list(channels))
-
-
-def scale_intensity_range(
-    data: Float32Array,
-    a_min: float,
-    a_max: float,
-    b_min: float,
-    b_max: float,
-) -> Float32Array:
-    """``ScaleIntensityRange(..., clip=True)`` in float32."""
-    result = (data - np.float32(a_min)) / np.float32(a_max - a_min)
-    result = result * np.float32(b_max - b_min) + np.float32(b_min)
-    return np.clip(result, np.float32(b_min), np.float32(b_max)).astype(np.float32, copy=False)
 
 
 def sigmoid(data: Float32Array) -> Float32Array:
@@ -271,21 +144,6 @@ def merge_classes(binary: Float32Array) -> Float32Array:
     for channel in weighted[1:]:
         merged = merged + channel * ~((merged != 0) & (channel != 0))
     return merged[None].astype(np.float32, copy=False)
-
-
-def write_nifti(path: Path, data: HostArray, affine: Float64Array, dtype: npt.DTypeLike) -> None:
-    """Cast and write a millimetre NIfTI with sform and qform code 1.
-
-    The sform stores the affine within NIfTI precision. The qform cannot
-    represent shear, which NiBabel removes when encoding that form.
-    """
-    array = np.asarray(data).astype(dtype, copy=False)
-    matrix = to_affine_nd(3, affine)
-    image = nib.Nifti1Image(array, matrix)
-    image.header.set_xyzt_units("mm")
-    image.set_sform(matrix, code=1)
-    image.set_qform(matrix, code=1)
-    nib.save(image, str(path))
 
 
 def _normalize_transform(shape: Sequence[int]) -> Float64Array:

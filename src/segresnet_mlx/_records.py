@@ -7,7 +7,7 @@ from typing import NotRequired, TypedDict
 
 from medmlx_core.outputs import RunResult as _RunResult
 
-from segresnet_mlx.topology import ArithmeticProfile
+from segresnet_mlx.topology import Precision
 
 type Json = bool | int | float | str | list[Json] | dict[str, Json] | None
 
@@ -61,7 +61,7 @@ class Details(TypedDict):
 
     weights_revision: NotRequired[str | None]
     bundle: str
-    precision: ArithmeticProfile
+    precision: Precision
     streaming: NotRequired[bool]
     labels: dict[str, str]
     labels_present: list[int]

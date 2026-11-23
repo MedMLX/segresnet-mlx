@@ -13,13 +13,12 @@ from segresnet_mlx._runtime import import_mlx
 
 if TYPE_CHECKING:
     from ignite.engine import Engine, Events
+    from medmlx_core.typing import MlxRuntime
     from medmlx_core.volume_workspace import VolumeWorkspace
 
     from segresnet_mlx._types import (
-        MLX,
         AccumulationOptions,
         Array,
-        CoreSlidingWindow,
         WorkspaceOptions,
     )
     from segresnet_mlx.network import SegResNet
@@ -27,9 +26,9 @@ if TYPE_CHECKING:
 import numpy as np
 from medmlx_core.errors import InvalidInputError
 from medmlx_core.layout import require_ncdhw
-from medmlx_core.typing import ArrayFactory
+from medmlx_core.typing import HostArray
 
-from segresnet_mlx._arrays import Float32Array, HostArray
+from segresnet_mlx._arrays import Float32Array
 from segresnet_mlx.medmlx import BUNDLES
 from segresnet_mlx.telemetry import SCHEMA_VERSION, WindowTelemetry
 
@@ -97,7 +96,7 @@ class BundlePredictor:
         network: Callable[[Array], Array],
         *,
         telemetry: WindowTelemetry | None = None,
-        mx: MLX | None = None,
+        mx: MlxRuntime | None = None,
     ) -> None:
         """Initialize the network runtime and optional per-window telemetry."""
         self.network = network
@@ -141,7 +140,7 @@ class BundlePredictor:
         Device inputs and logits stay in MLX; finite checks read one Boolean.
         """
         try:
-            if isinstance(values, self.mx.array):
+            if not isinstance(values, np.ndarray):
                 if values.dtype != self.mx.float32 or not bool(
                     self.mx.all(self.mx.isfinite(values)).item()
                 ):
@@ -151,8 +150,7 @@ class BundlePredictor:
                 validated = self._host_input(values)
             with self._measure_window():
                 device_input = (
-                    validated if isinstance(validated, self.mx.array)
-                    else cast(ArrayFactory, self.mx.array)(validated)
+                    self.mx.array(validated) if isinstance(validated, np.ndarray) else validated
                 )
                 return self._forward_validated_mlx(device_input)
         except BaseException as error:
@@ -189,7 +187,7 @@ class BundlePredictor:
     def _forward_validated_window(self, values: Float32Array) -> Float32Array:
         """Export one already-validated host patch without rescanning its input."""
         with self._measure_window():
-            logits = self._forward_validated_mlx(cast(ArrayFactory, self.mx.array)(values))
+            logits = self._forward_validated_mlx(self.mx.array(values))
             return cast(Float32Array, np.array(logits))
 
     def _forward_device_window(self, values: Array) -> Array:
@@ -227,11 +225,7 @@ class BundlePredictor:
             InvalidInputError: If ``values`` is not finite float32.
             ValueError: If ``values`` is not rank 5.
         """
-        import medmlx_core.sliding_window as core_sliding_window
-
-        sliding_window_inference = cast(
-            "CoreSlidingWindow", core_sliding_window
-        ).sliding_window_inference
+        from medmlx_core.sliding_window import sliding_window_inference
 
         try:
             if accumulation not in {"numpy", "mlx"}:
@@ -327,14 +321,14 @@ def predict_wide_logits(
     values: Float32Array,
     configuration: SlidingWindowConfig,
     *,
-    mx: MLX,
+    mx: MlxRuntime,
     workspace: VolumeWorkspace | None = None,
 ) -> Float32Array:
     """Carry paired Metal logits into FP64 host blending, rounding only at export.
 
     Preprocessed values and checkpoint parameters remain the same FP32 inputs.
     The original MONAI float64 network/inferer is the independent oracle for this
-    explicit profile. The learned graph runs on Metal; host work is stitching.
+    explicit precision. The learned graph runs on Metal; host work is stitching.
     """
     from medmlx_core.sliding_window import sliding_window_inference
 
@@ -342,7 +336,7 @@ def predict_wide_logits(
         patch: np.ndarray[tuple[int, ...], np.dtype[np.float64]],
     ) -> np.ndarray[tuple[int, ...], np.dtype[np.float64]]:
         """Combine paired Metal output words into float64 host logits."""
-        result = network.paired_forward(cast(ArrayFactory, mx.array)(patch.astype(np.float32)))
+        result = network.paired_forward(mx.array(patch.astype(np.float32)))
         mx.eval(result)
         mx.synchronize()
         packed = np.array(result, dtype=np.float32)

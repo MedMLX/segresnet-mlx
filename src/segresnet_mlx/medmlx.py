@@ -19,16 +19,24 @@ if TYPE_CHECKING:
 
 import numpy as np
 from medmlx_core.errors import (
-    AssetNotReadyError,
     InvalidInputError,
     ModelExecutionError,
 )
 from medmlx_core.files import PathLike, input_channels, output_targets, publish
+from medmlx_core.geometry import affine_to_spacing
 from medmlx_core.outputs import artifact
-from medmlx_core.weights import model_folder, weights_revision
+from medmlx_core.transforms import (
+    axis_codes,
+    correct_nifti_header,
+    orient,
+    scale_intensity_range,
+    spacing,
+)
+from medmlx_core.volumes import read_volume, write_volume
+from medmlx_core.weights import weights_file, weights_revision
 
 from segresnet_mlx import transforms
-from segresnet_mlx.topology import ArithmeticProfile, SegResNetSpec
+from segresnet_mlx.topology import Precision, SegResNetSpec
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,7 +55,7 @@ class Bundle:
     overlap: float
     channels: tuple[str, ...]
     labels: Mapping[int, str]
-    output_dtype: str
+    output_dtype: type[np.float32]
     mode: str = "constant"
     padding_mode: str = "constant"
 
@@ -69,7 +77,7 @@ BUNDLES: dict[str, Bundle] = {
             4: "neoplasm",
             5: "parenchyma",
         },
-        output_dtype="float32",
+        output_dtype=np.float32,
     ),
 }
 
@@ -102,7 +110,7 @@ class Volume:
 
     ``data`` has no channel axis and keeps the file's voxel axis order; ``affine`` is
     the voxel-to-world matrix chosen by the nibabel reader after MONAI's header
-    correction (see ``transforms.image_arrays``), and ``shape`` is the stored shape.
+    correction (see ``load_volume``), and ``shape`` is the stored shape.
     """
 
     path: Path
@@ -116,10 +124,11 @@ class SpatialInverse:
     """The reference key's applied transforms, which the bundle's ``Invertd`` reverses.
 
     ``affine`` is the voxel-to-world matrix of the preprocessed grid that the network
-    sees (after reorientation and resampling).
+    sees (after reorientation and resampling). ``orientation`` holds the axis codes
+    of the source affine, which ``Orientation.inverse`` reorients back to.
     """
 
-    orientation: transforms.Orientation
+    orientation: str
     resampling: transforms.Resampling
     affine: Float64Array
 
@@ -130,7 +139,7 @@ def run(
     output_dir: PathLike,
     weights_path: PathLike | None = None,
     overwrite: bool = False,
-    precision: ArithmeticProfile = "source-fp32",
+    precision: Precision = "source-fp32",
     streaming: bool = False,
     scratch_dir: PathLike | None = None,
 ) -> RunResult:
@@ -142,10 +151,9 @@ def run(
     inverse transforms run unchanged. Writes ``mask.nii.gz`` in ``output_dir`` on
     the arterial shape and reader-selected affine (see ``Volume``): float32 labels
     0-5, as the bundle's ``SaveImaged`` wrote them. Every argument and output target
-    is checked before weights download or inputs load. The NIfTI spatial-unit field
-    must be mm or unspecified (then assumed mm); other units are refused, not
-    converted. Paths are not locked against concurrent replacement after the alias
-    check.
+    is checked before weights download or inputs load. Meter and micron headers
+    are converted to mm and an unspecified unit is taken as mm. Paths are not
+    locked against concurrent replacement after the alias check.
 
     ``precision="compensated-fp32"`` uses Metal float pairs for convolution and
     GroupNorm accumulation, with float32 layer boundaries. Its source comparison
@@ -182,7 +190,7 @@ def run(
         InvalidInputError: Unknown precision, wrong or absent ``image_paths`` channels,
             ``overwrite`` or ``streaming`` not a bool, an output target that exists
             without ``overwrite`` or aliases an input, or an unreadable, non-3D,
-            non-finite, non-mm or mismatched-grid NIfTI input.
+            non-finite, unknown-unit or mismatched-grid NIfTI input.
         AssetNotReadyError: The weights folder or file is missing, or the file does
             not match the bundle's network.
         ModelExecutionError: Inference failed or produced a mask off the source grid
@@ -198,10 +206,12 @@ def run(
         streaming=streaming,
         scratch_dir=scratch_dir,
     )
-    weights = _weights_file(model_folder(MODEL_ID, weights_path) / WEIGHTS_NAME)
+    weights = weights_file(MODEL_ID, weights_path, WEIGHTS_NAME)
     started = time.perf_counter()
     volumes = load_inputs(list(sources.items()))
-    network = _load_network(weights, config.spec, arithmetic_profile=precision)
+    from segresnet_mlx.weights import load_network
+
+    network = load_network(weights, spec=config.spec, precision=precision)
     loaded = time.perf_counter()
     image, inverse = preprocess_renal(volumes)
     prepared = time.perf_counter()
@@ -225,7 +235,7 @@ def run(
         )
     _validate_mask(mask, volumes[0], config)
     affine, dtype = volumes[0].affine, config.output_dtype
-    publish({mask_path: lambda path: transforms.write_nifti(path, mask, affine, dtype)})
+    publish({mask_path: lambda path: write_volume(path, mask, affine, dtype=dtype)})
     finished = time.perf_counter()
     present = sorted(int(value) for value in np.unique(mask))
     return {
@@ -247,7 +257,7 @@ def run(
             "labels_present": present,
             "input_shape": list(volumes[0].shape),
             "network_input_shape": list(image.shape[2:]),
-            "output_dtype": config.output_dtype,
+            "output_dtype": np.dtype(config.output_dtype).name,
             "sliding_window": {
                 "roi_size": list(config.roi_size),
                 "sw_batch_size": config.sw_batch_size,
@@ -274,7 +284,7 @@ def _check_arguments(
     output_dir: PathLike,
     *,
     overwrite: bool,
-    precision: ArithmeticProfile,
+    precision: Precision,
     streaming: bool,
     scratch_dir: PathLike | None,
 ) -> tuple[dict[str, Path], Path]:
@@ -311,8 +321,8 @@ def preprocess_renal(volumes: list[Volume]) -> tuple[Float32Array, SpatialInvers
     first_pixdim: Float64Array | None = None
     output_shape: tuple[int, ...] | None = None
     for volume in volumes:
-        oriented, affine, orientation = transforms.orient(volume.data[None], volume.affine, "LPS")
-        pixdim = transforms.affine_to_spacing(affine, 3)
+        oriented, affine = orient(volume.data[None], volume.affine, "LPS")
+        pixdim = affine_to_spacing(affine, 3)
         if first_shape is None or first_pixdim is None:
             first_shape, first_pixdim = oriented.shape[1:], pixdim
             should_match = False
@@ -320,18 +330,17 @@ def preprocess_renal(volumes: list[Volume]) -> tuple[Float32Array, SpatialInvers
             should_match = np.allclose(first_shape, oriented.shape[1:]) and np.allclose(
                 first_pixdim, pixdim, atol=1e-3
             )
-        resampled, affine, resampling = transforms.spacing(
-            oriented, affine, _RENAL_SPACING, output_shape if should_match else None
+        resampled, resampled_affine = spacing(
+            oriented, affine, _RENAL_SPACING, spatial_size=output_shape if should_match else None
         )
         if output_shape is None:
             output_shape = resampled.shape[1:]
         if record is None:
-            record = SpatialInverse(orientation, resampling, affine)
+            resampling = transforms.Resampling(affine, oriented.shape[1:])
+            record = SpatialInverse(axis_codes(volume.affine), resampling, resampled_affine)
         channels.append(resampled)
     assert record is not None
-    image = transforms.scale_intensity_range(
-        transforms.concatenate(channels), -1000, 1000, 0.0, 1.0
-    )
+    image = scale_intensity_range(transforms.concatenate(channels), -1000, 1000, 0.0, 1.0)
     return image[None], record
 
 
@@ -344,7 +353,7 @@ def postprocess_renal(logits: Float32Array, inverse: SpatialInverse) -> Float32A
     """
     # Background never contributes to the final class map.
     values, affine = transforms.invert_spacing(logits[1:], inverse.affine, inverse.resampling)
-    values, _ = transforms.invert_orientation(values, affine, inverse.orientation)
+    values, _ = orient(values, affine, inverse.orientation)
     # Preserve float32 sigmoid rounding at the threshold, including near-negative logits.
     active = transforms.sigmoid_threshold_mask(values)
     # Foreground channels correspond to class IDs 1..5; the first active one wins.
@@ -363,32 +372,13 @@ def postprocess_streaming(logits: Float32Array, inverse: SpatialInverse) -> Floa
         values, affine = transforms.invert_spacing(
             logits[channel : channel + 1], inverse.affine, inverse.resampling
         )
-        values, _ = transforms.invert_orientation(values, affine, inverse.orientation)
+        values, _ = orient(values, affine, inverse.orientation)
         active = transforms.sigmoid_threshold_mask(values)[0]
         if labels is None:
             labels = np.zeros(active.shape, dtype=np.float32)
         labels[(labels == 0) & active] = channel
     assert labels is not None
     return labels
-
-
-def _weights_file(weights_path: str | Path) -> Path:
-    """Validate a safetensors file path while retaining any Hub-cache symlink."""
-    # MLX identifies the file format from the supplied name. Hub cache paths are
-    # named .safetensors symlinks whose underlying content-addressed blobs have no suffix.
-    path = Path(weights_path).expanduser().absolute()
-    hint = "Download the matching safetensors file from the MedMLX weight repositories."
-    if not path.is_file():
-        raise AssetNotReadyError(
-            f"SegResNet weights not found: {path}", reason=f"missing {path}", hint=hint
-        )
-    if path.suffix != ".safetensors":
-        raise AssetNotReadyError(
-            f"SegResNet weights must be converted MLX safetensors, got {path.name}",
-            reason=f"unconverted {path.name}",
-            hint=hint,
-        )
-    return path
 
 
 def load_inputs(roles: list[tuple[str, str | Path | None]]) -> list[Volume]:
@@ -412,62 +402,26 @@ def load_inputs(roles: list[tuple[str, str | Path | None]]) -> list[Volume]:
 
 
 def load_volume(path: Path, role: str) -> Volume:
-    """Read 3D voxels using the affine selected by the upstream nibabel reader.
+    """MONAI's nibabel ``LoadImage``: read through ``read_volume``, then correct the header.
 
-    Voxels must be real, finite and representable as float32. Spatial units must be
-    mm or unspecified (assumed mm), and the corrected affine must be invertible.
+    ``read_volume`` admits finite, real, float32-representable 3D voxels on an
+    invertible grid and converts meter and micron headers to mm. The header
+    correction rounds replaced forms in the header's float type, float64 for NIfTI-2.
     """
-    from segresnet_mlx._nifti import ImageFileError, nib
-
-    if not path.is_file():
-        raise InvalidInputError(f"{role} not found: {path}")
-    try:
-        image = nib.load(path.as_posix())
-    except (OSError, ImageFileError) as error:
-        raise InvalidInputError(f"Invalid {role} NIfTI: {path}") from error
-    try:
-        spatial_units, _ = image.header.get_xyzt_units()
-    except (AttributeError, KeyError, ValueError) as error:
-        raise InvalidInputError(f"{role} has invalid NIfTI spatial units") from error
-    if spatial_units not in ("mm", "unknown"):
-        raise InvalidInputError(f"{role} spatial units must be mm or unspecified")
-    raw = np.asanyarray(image.dataobj)
-    if raw.ndim != 3:
-        raise InvalidInputError(f"{role} must be a 3D NIfTI; got shape {tuple(raw.shape)}")
-    if np.iscomplexobj(raw):
-        raise InvalidInputError(f"{role} must contain real-valued voxels")
-    if not np.all(np.isfinite(raw)):
-        raise InvalidInputError(f"{role} contains non-finite voxels")
-    limit = np.finfo(np.float32).max
-    if np.any(raw > limit) or np.any(raw < -limit):
-        raise InvalidInputError(f"{role} contains voxels outside the finite float32 range")
-    affine = np.asarray(image.affine, dtype=np.float64)
-    if affine.shape != (4, 4) or not np.all(np.isfinite(affine)):
-        raise InvalidInputError(f"{role} affine must be a finite 4x4 matrix")
-    data, reader_affine = transforms.image_arrays(image, raw)
-    if not np.all(np.isfinite(reader_affine)) or np.linalg.matrix_rank(reader_affine[:3, :3]) < 3:
-        raise InvalidInputError(f"{role} affine must define an invertible 3D grid")
-    shape = (int(raw.shape[0]), int(raw.shape[1]), int(raw.shape[2]))
-    return Volume(path=path, shape=shape, affine=reader_affine, data=data)
-
-
-def _load_network(
-    weights: Path,
-    spec: SegResNetSpec,
-    *,
-    arithmetic_profile: ArithmeticProfile = "source-fp32",
-) -> SegResNet:
-    """Strictly load converted weights for the bundle topology."""
-    from segresnet_mlx.weights import load_network
-
-    try:
-        return load_network(weights, spec=spec, arithmetic_profile=arithmetic_profile)
-    except (InvalidInputError, ValueError, RuntimeError) as error:
-        raise AssetNotReadyError(
-            f"SegResNet weights {weights} do not match {spec}: {error}",
-            reason=f"mismatched {weights.name}",
-            hint="Download the matching safetensors file from the MedMLX weight repositories.",
-        ) from error
+    volume = read_volume(path, role=role)
+    # NIfTI-2 headers are 540 bytes and store their fields in float64.
+    header_float = np.float64 if int(volume.header["sizeof_hdr"]) == 540 else np.float32
+    affine, _ = correct_nifti_header(
+        volume.affine,
+        volume.zooms,
+        volume.sform,
+        volume.sform_code,
+        volume.qform,
+        volume.qform_code,
+        header_float=header_float,
+    )
+    depth, height, width = volume.data.shape
+    return Volume(path=path, shape=(depth, height, width), affine=affine, data=volume.data)
 
 
 def predict(
@@ -494,7 +448,7 @@ def predict(
         host = np.ascontiguousarray(image, dtype=np.float32)
         logits = (
             predict_wide_logits(network, host, window, mx=mx, workspace=workspace)
-            if network.arithmetic_profile == "compensated-fp48"
+            if network.precision == "compensated-fp48"
             else BundlePredictor(network, mx=mx).predict_logits(host, window, workspace=workspace)
         )
     except (RuntimeError, ValueError) as error:

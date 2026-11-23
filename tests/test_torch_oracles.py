@@ -8,16 +8,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import pytest
 from fixture_contracts import from_numpy
-from medmlx_core.typing import ArrayFactory
 from real_ct import renal_input
 
 from segresnet_mlx._arrays import as_numpy
-from segresnet_mlx.topology import ArithmeticProfile, SegResNetSpec
+from segresnet_mlx.topology import Precision, SegResNetSpec
 from segresnet_mlx.weights import load_network
 
 pytestmark = pytest.mark.mlx
@@ -29,10 +27,10 @@ _RAW_LOGIT_ATOL = 1e-4
 @pytest.mark.parametrize("sparse_volume", [False, True], ids=["dense", "sparse-accumulation"])
 @pytest.mark.parametrize("seed", [23, 47])
 @pytest.mark.parametrize(
-    "arithmetic_profile", ["source-fp32", "compensated-fp32", "compensated-fp48"]
+    "precision", ["source-fp32", "compensated-fp32", "compensated-fp48"]
 )
 def test_renal_segresnet_checkpoint_matches_monai_raw_logits(
-    sparse_volume: bool, seed: int, arithmetic_profile: ArithmeticProfile
+    sparse_volume: bool, seed: int, precision: Precision
 ) -> None:
     """Compare released renal logits and signs with the original MONAI graph."""
     checkpoint_root = os.environ.get("MEDMLX_TEST_CHECKPOINT_ROOT")
@@ -67,11 +65,11 @@ def test_renal_segresnet_checkpoint_matches_monai_raw_logits(
     state = torch.load(checkpoint, map_location="cpu", weights_only=True)
     state = state.get("model", state)
     source.load_state_dict(state, strict=True)
-    if arithmetic_profile == "compensated-fp48":
+    if precision == "compensated-fp48":
         source.double()
-    if arithmetic_profile == "compensated-fp32":
+    if precision == "compensated-fp32":
         # Independent original Torch operators accumulate in float64, then
-        # round at each convolution/GroupNorm boundary just as the profile states.
+        # round at each convolution/GroupNorm boundary, as compensated-fp32 does.
         def promote(
             module: torch.nn.Module, arguments: tuple[torch.Tensor, ...]
         ) -> tuple[torch.Tensor, ...]:
@@ -93,12 +91,12 @@ def test_renal_segresnet_checkpoint_matches_monai_raw_logits(
     values = renal_input(seed, sparse=sparse_volume)
     with torch.inference_mode():
         source_input = from_numpy(values)
-        if arithmetic_profile == "compensated-fp48":
+        if precision == "compensated-fp48":
             source_input = source_input.double()
         expected = source(source_input).float().numpy()
 
-    candidate = load_network(Path(weights_file), spec=spec, arithmetic_profile=arithmetic_profile)
-    actual = candidate(cast(ArrayFactory, mx.array)(values))
+    candidate = load_network(Path(weights_file), spec=spec, precision=precision)
+    actual = candidate(mx.array(values))
     mx.eval(actual)
     host = as_numpy(actual)
 

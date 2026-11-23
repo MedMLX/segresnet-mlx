@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from fixture_contracts import ModelFixture
 
 if TYPE_CHECKING:
-    from segresnet_mlx._types import MLX
+    from medmlx_core.typing import MlxRuntime
 
 import pytest
 from reference_data import network_fixture
@@ -26,7 +26,7 @@ def no_decoder_reference() -> ModelFixture:
 
 
 @pytest.fixture
-def mx() -> MLX:
+def mx() -> MlxRuntime:
     """Import the MLX runtime used by Metal tests."""
     from segresnet_mlx._runtime import import_mlx
 

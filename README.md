@@ -70,15 +70,15 @@ weights, pass `weights_path` as a folder containing `segresnet-renal-cect.safete
 - **Field of view:** the model was trained on CT cropped to the kidney region. Crop
   around each kidney with a margin of about 15 mm; on a wider field of view it can
   label vertebral bodies or liver as neoplasm.
-- **Input:** finite 3D volumes on one voxel grid, with spatial units in millimeters or
-  unspecified.
+- **Input:** finite 3D volumes on one voxel grid. Meter and micron headers are converted
+  to millimeters, and an unspecified unit is taken as millimeters.
 - **Mask:** float32 on the input grid as the reader interprets its header, with labels
   1 artery, 2 vein, 3 ureter, 4 neoplasm and 5 parenchyma. Where classes overlap, the
   lower label wins.
 
 | `precision` | Arithmetic |
 | :--- | :--- |
-| `source-fp32` (default) | The default float32 profile |
+| `source-fp32` (default) | The default float32 precision |
 | `compensated-fp32` | Convolution and GroupNorm accumulate in paired Metal floats, with float32 layer outputs |
 | `compensated-fp48` | The pairs carry through the hidden layers and stitching runs in float64 on the host |
 
@@ -109,7 +109,7 @@ volume_logits = predict_logits(patch, config, network=network)  # stitched slidi
 - `predict_logits` takes preprocessed arrays of any size and stitches the bundle's
   sliding windows. Neither normalizes intensities, applies activations or maps labels.
 - `load_network` checks tensor names, shapes and finite float32 values against
-  `required_shapes(spec)`.
+  `required_shapes(spec)` and raises `AssetNotReadyError` on a mismatch.
 - `WindowTelemetry` and `BundlePredictor` record bounded progress and timing.
 
 ## Use with MedMLX

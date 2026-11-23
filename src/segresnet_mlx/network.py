@@ -7,14 +7,15 @@ from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from medmlx_core.compensated import CompensatedFloat32Operators, CompensatedFloat48Operators
+    from medmlx_core.typing import MlxRuntime
 
-    from segresnet_mlx._types import MLX, Array
+    from segresnet_mlx._types import Array
 
 from medmlx_core.layout import require_ncdhw
 from medmlx_core.ops import conv_transpose3d_ncdhw, upsample_trilinear_ncdhw
 from medmlx_core.precision import Float32Operators
 
-from segresnet_mlx.topology import ArithmeticProfile, SegResNetSpec
+from segresnet_mlx.topology import Precision, SegResNetSpec
 
 
 class SegResNet:
@@ -29,10 +30,10 @@ class SegResNet:
     ``segresnet_mlx.weights`` lists them. Inference only: dropout is omitted and
     no activation is applied to the output.
 
-    ``arithmetic_profile`` selects the accumulation scheme (see the README):
+    ``precision`` selects the accumulation scheme (see the README):
     ``"source-fp32"`` (default), ``"compensated-fp32"``, or
     ``"compensated-fp48"``, which needs ``upsample_mode="deconv"`` and raises
-    ``ValueError`` otherwise. The first two profiles use float32 layer boundaries;
+    ``ValueError`` otherwise. The first two use float32 layer boundaries;
     ``compensated-fp48`` carries paired float32 values through the hidden layers.
     """
 
@@ -41,30 +42,30 @@ class SegResNet:
         spec: SegResNetSpec,
         weights: Mapping[str, Array],
         *,
-        mx: MLX,
-        arithmetic_profile: ArithmeticProfile = "source-fp32",
+        mx: MlxRuntime,
+        precision: Precision = "source-fp32",
     ) -> None:
         """Bind the topology and weights and select their arithmetic operators."""
         self.spec = spec
         self._weights = weights
         self._mx = mx
-        self.arithmetic_profile = arithmetic_profile
+        self.precision = precision
         # Both convolution and normalization accumulation order affect sparse
         # released-checkpoint logits; correcting only one leaves amplified drift.
-        if arithmetic_profile == "source-fp32":
+        if precision == "source-fp32":
             self._operators = Float32Operators(mx, spec.num_groups, spec.norm_eps)
-        elif arithmetic_profile == "compensated-fp32":
+        elif precision == "compensated-fp32":
             from medmlx_core.compensated import CompensatedFloat32Operators as AccuracyOperators
 
             self._operators = AccuracyOperators(mx, spec.num_groups, spec.norm_eps)
-        elif arithmetic_profile == "compensated-fp48":
+        elif precision == "compensated-fp48":
             if spec.upsample_mode != "deconv":
                 raise ValueError("Paired precision requires transpose-convolution upsampling")
             from medmlx_core.compensated import CompensatedFloat48Operators as PairedOperators
 
             self._operators = PairedOperators(mx, spec.num_groups, spec.norm_eps)
         else:
-            raise ValueError(f"Unknown SegResNet arithmetic profile {arithmetic_profile!r}")
+            raise ValueError(f"Unknown SegResNet precision {precision!r}")
 
     def __call__(self, values: Array) -> Array:
         """Return float32 logits ``(N, out_channels, D, H, W)`` for an ``(N, C, D, H, W)`` input.
@@ -73,7 +74,7 @@ class SegResNet:
             ValueError: If the input is not rank 5, has the wrong channel count, or a
                 spatial size is not divisible by ``2 ** len(spec.blocks_up)``.
         """
-        if self.arithmetic_profile == "compensated-fp48":
+        if self.precision == "compensated-fp48":
             operators = cast("CompensatedFloat48Operators", self._operators)
             return operators.round(self.paired_forward(values))
         return self._forward(values)
@@ -85,8 +86,8 @@ class SegResNet:
         volumes followed by their low words. Their float64 sum is the logit; the
         caller (``predict_wide_logits``) does that sum on the host.
         """
-        if self.arithmetic_profile != "compensated-fp48":
-            raise ValueError("Paired logits require the compensated-fp48 profile")
+        if self.precision != "compensated-fp48":
+            raise ValueError("Paired logits require compensated-fp48 precision")
         operators = cast("CompensatedFloat48Operators", self._operators)
         return self._forward(operators.pack(values))
 
@@ -115,7 +116,7 @@ class SegResNet:
             hidden = self.conv(hidden, f"up_samples.{stage}.0.conv", padding=0)
             if self.spec.upsample_mode == "deconv":
                 prefix = f"up_samples.{stage}.1.deconv"
-                if self.arithmetic_profile != "source-fp32":
+                if self.precision != "source-fp32":
                     hidden = cast("CompensatedFloat32Operators", self._operators).conv_transpose3d(
                         hidden, self._weights[f"{prefix}.weight"], self._weights[f"{prefix}.bias"]
                     )
@@ -150,20 +151,20 @@ class SegResNet:
         return self._add(hidden, values)
 
     def _relu(self, values: Array) -> Array:
-        """Apply ReLU using paired arithmetic when the fp48 profile is active."""
+        """Apply ReLU using paired arithmetic under compensated-fp48 precision."""
         # fp48 activations are paired float32 words, so ReLU must act on the pair.
         return (
             cast("CompensatedFloat48Operators", self._operators).relu(values)
-            if self.arithmetic_profile == "compensated-fp48"
+            if self.precision == "compensated-fp48"
             else self._mx.maximum(values, 0.0)
         )
 
     def _add(self, values: Array, other: Array) -> Array:
-        """Add residual or skip values using the selected arithmetic profile."""
+        """Add residual or skip values using the selected precision."""
         # Residual/skip add; for fp48 it is a paired-precision add, not a plain float32 sum.
         return (
             cast("CompensatedFloat48Operators", self._operators).add(values, other)
-            if self.arithmetic_profile == "compensated-fp48"
+            if self.precision == "compensated-fp48"
             else values + other
         )
 

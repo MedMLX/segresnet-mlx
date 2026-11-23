@@ -8,9 +8,8 @@ from typing import Protocol, TypedDict, cast
 import numpy as np
 import torch
 from fixture_contracts import from_numpy
+from medmlx_core.typing import HostArray
 from monai.networks.nets.segresnet import SegResNet
-
-type HostArray = np.ndarray[tuple[int, ...], np.dtype[np.generic]]
 
 
 class Spec(TypedDict):

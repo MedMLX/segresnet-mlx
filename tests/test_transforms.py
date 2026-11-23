@@ -8,6 +8,7 @@ from typing import cast
 import numpy as np
 import pytest
 from fixture_contracts import from_numpy
+from medmlx_core.volumes import read_volume, write_volume
 from reference_data import (
     BUNDLE_INPUT_KEYS,
     FIXTURES,
@@ -18,7 +19,6 @@ from reference_data import (
 
 from segresnet_mlx import medmlx, transforms
 from segresnet_mlx._arrays import MaskArray
-from segresnet_mlx._nifti import nib
 from segresnet_mlx.medmlx import BUNDLES
 
 RENAL = "renalStructures_CECT_segmentation"
@@ -98,21 +98,23 @@ def test_mask_file_matches_the_bundle_writer(tmp_path: Path) -> None:
     """Compare saved label values, dtype, affine, and form codes with MONAI."""
     arrays, saved = bundle_fixture("renal")
     for case in CASES:
-        reference = nib.load(write_inputs(tmp_path, "renal", case)[BUNDLES[RENAL].channels[0]])
+        reference = read_volume(
+            write_inputs(tmp_path, "renal", case)[BUNDLES[RENAL].channels[0]]
+        )
         path = tmp_path / f"{case}.nii.gz"
-        transforms.write_nifti(
+        write_volume(
             path,
             cast(MaskArray, arrays[f"{case}::mask"]),
             reference.affine,
-            BUNDLES[RENAL].output_dtype,
+            dtype=BUNDLES[RENAL].output_dtype,
         )
-        written = nib.load(str(path))
-        assert str(written.get_data_dtype()) == saved[case]["dtype"]
-        assert list(written.shape) == saved[case]["shape"]
-        assert int(written.header["qform_code"]) == saved[case]["qform_code"]
-        assert int(written.header["sform_code"]) == saved[case]["sform_code"]
+        written = read_volume(path, dtype=None)
+        assert str(written.data.dtype) == saved[case]["dtype"]
+        assert list(written.data.shape) == saved[case]["shape"]
+        assert written.qform_code == saved[case]["qform_code"]
+        assert written.sform_code == saved[case]["sform_code"]
         assert np.allclose(written.affine, saved[case]["affine"], rtol=0, atol=1e-6)
-        assert np.array_equal(np.asanyarray(written.dataobj), arrays[f"{case}::mask"])
+        assert np.array_equal(written.data, arrays[f"{case}::mask"])
 
 
 @pytest.mark.parametrize("forms", ["disagree", "unset", "sform_spacing"])

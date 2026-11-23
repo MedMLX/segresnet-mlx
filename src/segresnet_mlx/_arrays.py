@@ -10,7 +10,6 @@ import numpy as np
 if TYPE_CHECKING:
     from segresnet_mlx._types import Array
 
-type HostArray = np.ndarray[tuple[int, ...], np.dtype[np.generic]]
 type Float32Array = np.ndarray[tuple[int, ...], np.dtype[np.float32]]
 type Float64Array = np.ndarray[tuple[int, ...], np.dtype[np.float64]]
 type Int64Array = np.ndarray[tuple[int, ...], np.dtype[np.int64]]

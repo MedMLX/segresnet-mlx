@@ -10,7 +10,9 @@ from fixture_contracts import NumericArrays, PredictorMetadata
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from segresnet_mlx._types import MLX, Array
+    from medmlx_core.typing import MlxRuntime
+
+    from segresnet_mlx._types import Array
 
 import numpy as np
 import pytest
@@ -25,7 +27,7 @@ pytestmark = pytest.mark.mlx
 
 
 @pytest.mark.parametrize("device_input", [False, True])
-def test_forward_retains_network_logits(device_input: bool, mx: MLX) -> None:
+def test_forward_retains_network_logits(device_input: bool, mx: MlxRuntime) -> None:
     """The MLX callback returns the network array itself, with no host round trip."""
     host = np.full((1, 1, 2, 3, 4), 0.5, dtype=np.float32)
     logits = mx.array(host * 2)
@@ -42,7 +44,7 @@ def test_forward_retains_network_logits(device_input: bool, mx: MLX) -> None:
 @pytest.mark.parametrize("failure", ["input_dtype", "input_nonfinite", "output_nonfinite"])
 @pytest.mark.parametrize("device_input", [False, True])
 def test_forward_validation_records_failure(
-    failure: str, device_input: bool, mx: MLX, tmp_path: Path,
+    failure: str, device_input: bool, mx: MlxRuntime, tmp_path: Path,
 ) -> None:
     """Both input boundaries reject bad data and output failures close telemetry."""
     host = np.ones((1, 1, 2, 3, 4), dtype=np.float32)
@@ -65,7 +67,7 @@ def test_forward_validation_records_failure(
 
 @pytest.mark.parametrize("accumulation", ["numpy", "mlx"])
 def test_volume_telemetry_counts_completed_windows(
-    mx: MLX, tmp_path: Path, accumulation: Literal["numpy", "mlx"],
+    mx: MlxRuntime, tmp_path: Path, accumulation: Literal["numpy", "mlx"],
 ) -> None:
     """Validated device patches retain the caller-owned telemetry lifecycle."""
     host = np.ones((1, 1, 5, 3, 4), dtype=np.float32)
@@ -94,7 +96,7 @@ def test_volume_telemetry_counts_completed_windows(
 )
 @pytest.mark.parametrize("accumulation", ["numpy", "mlx"])
 def test_predictor_matches_upstream(
-    name: str, mx: MLX, accumulation: Literal["numpy", "mlx"],
+    name: str, mx: MlxRuntime, accumulation: Literal["numpy", "mlx"],
 ) -> None:
     """Compare sliding-window logits and batch shapes with recorded MONAI cases."""
     arrays, metadata = load_fixture(FIXTURES / f"predictor_{name}.npz")
