@@ -67,15 +67,14 @@ weights, pass `weights_path` as a folder containing `segresnet-renal-cect.safete
 | `streaming` | `False` by default; `True` keeps blending intermediates and logits in temporary mapped files |
 | `scratch_dir` | Parent directory for the streaming files; defaults to the system temporary directory |
 
-Inputs are finite 3D volumes on one voxel grid, with spatial units in millimetres or
-unspecified. The mask is written on the input grid as the NIfTI reader corrects it.
-
-The model was trained on CT cropped to the kidney region. Crop around each kidney,
-with a margin of about 15 mm, before running it: on a wider field of view it can label
-vertebral bodies or liver as neoplasm.
-
-The mask is float32 with labels 1 artery, 2 vein, 3 ureter, 4 neoplasm and
-5 parenchyma; where classes overlap, the lower label wins.
+- **Field of view:** the model was trained on CT cropped to the kidney region. Crop
+  around each kidney with a margin of about 15 mm; on a wider field of view it can
+  label vertebral bodies or liver as neoplasm.
+- **Input:** finite 3D volumes on one voxel grid, with spatial units in millimeters or
+  unspecified.
+- **Mask:** float32 on the input grid as the reader interprets its header, with labels
+  1 artery, 2 vein, 3 ureter, 4 neoplasm and 5 parenchyma. Where classes overlap, the
+  lower label wins.
 
 | `precision` | Arithmetic |
 | :--- | :--- |
@@ -83,12 +82,12 @@ The mask is float32 with labels 1 artery, 2 vein, 3 ureter, 4 neoplasm and
 | `compensated-fp32` | Convolution and GroupNorm accumulate in paired Metal floats, with float32 layer outputs |
 | `compensated-fp48` | The pairs carry through the hidden layers and stitching runs in float64 on the host |
 
-`run` returns `{"outputs": {"mask": path}, "artifacts": {"mask": ...}, "details": {...}}`: the `mask` artifact names the labels and the input grid it is on, and `details` holds run metadata.
-Invalid inputs raise `InvalidInputError`; missing or mismatched weights raise
-`AssetNotReadyError`; inference failures raise `ModelExecutionError`.
-
-Streaming files are removed on success and failure. The final label volume stays in
-memory.
+- **Return value:** `{"outputs": {"mask": path}, "artifacts": {"mask": ...}, "details": {...}}`.
+  The `mask` artifact names the labels and the input grid; `details` holds run metadata.
+- **Errors:** invalid inputs raise `InvalidInputError`; missing or mismatched weights
+  raise `AssetNotReadyError`; inference failures raise `ModelExecutionError`.
+- **Streaming:** temporary files are removed on success and failure. The final label
+  volume stays in memory.
 
 ### Python API
 
@@ -112,7 +111,6 @@ volume_logits = predict_logits(patch, config, network=network)  # stitched slidi
 - `load_network` checks tensor names, shapes and finite float32 values against
   `required_shapes(spec)`.
 - `WindowTelemetry` and `BundlePredictor` record bounded progress and timing.
-- Inference requires Apple Silicon with Metal.
 
 ## Use with MedMLX
 
