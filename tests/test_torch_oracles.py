@@ -29,7 +29,7 @@ _RAW_LOGIT_ATOL = 1e-4
 @pytest.mark.parametrize("sparse_volume", [False, True], ids=["dense", "sparse-accumulation"])
 @pytest.mark.parametrize("seed", [23, 47])
 @pytest.mark.parametrize(
-    "arithmetic_profile", ["torch-order-fp32", "compensated-fp32", "compensated-fp48"]
+    "arithmetic_profile", ["source-fp32", "compensated-fp32", "compensated-fp48"]
 )
 def test_renal_segresnet_checkpoint_matches_monai_raw_logits(
     sparse_volume: bool, seed: int, arithmetic_profile: ArithmeticProfile

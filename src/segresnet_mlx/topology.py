@@ -8,7 +8,7 @@ from typing import Literal
 
 # Accumulation scheme for convolution and GroupNorm; the README describes the three
 # profiles. ``compensated-fp48`` additionally requires transpose-convolution upsampling.
-type ArithmeticProfile = Literal["torch-order-fp32", "compensated-fp32", "compensated-fp48"]
+type ArithmeticProfile = Literal["source-fp32", "compensated-fp32", "compensated-fp48"]
 
 
 @dataclass(frozen=True, slots=True)

@@ -30,7 +30,7 @@ memory, macOS 27.2.1, MLX 0.32.4, and `medmlx-core` 0.3.1. The baseline was
 `49a86c7`. A 270×160×63 crop of the HCC-TACE-Seg HCC_063 contrast CT was supplied
 to all three phase inputs. The crop uses voxel ranges `[108:378, 217:377, 13:76]`
 on the prepared LPS grid. The runner resampled it to 290×172×195 and used 36
-windows with the default `torch-order-fp32` profile, 96³ ROI, batch size 4, and
+windows with the default `source-fp32` profile, 96³ ROI, batch size 4, and
 overlap 0.25.
 
 Perfkit alternated fresh workers over ten paired rounds for loading and six for
@@ -119,7 +119,7 @@ The 240×240×155 `BRATS_001` case used four Medical Segmentation Decathlon brai
 MRI sequences (T1gd, T1w, T2w and FLAIR). BraTS was removed in `segresnet-mlx`
 0.4.0, so those runs used the last release that registered `segresnet-brats`
 (0.3.6), its locked `medmlx-core` 0.2.6, and cached checkpoint revision `dd339bb`.
-It used one 240×240×160 window, batch size 1 and the default `torch-order-fp32`
+It used one 240×240×160 window, batch size 1 and the default `source-fp32`
 profile under MLX 0.32.4.
 
 Perfkit 0.3.0.dev0 used six balanced rounds per input with one uncounted

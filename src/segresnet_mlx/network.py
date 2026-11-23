@@ -30,7 +30,7 @@ class SegResNet:
     no activation is applied to the output.
 
     ``arithmetic_profile`` selects the accumulation scheme (see the README):
-    ``"torch-order-fp32"`` (default), ``"compensated-fp32"``, or
+    ``"source-fp32"`` (default), ``"compensated-fp32"``, or
     ``"compensated-fp48"``, which needs ``upsample_mode="deconv"`` and raises
     ``ValueError`` otherwise. The first two profiles use float32 layer boundaries;
     ``compensated-fp48`` carries paired float32 values through the hidden layers.
@@ -42,7 +42,7 @@ class SegResNet:
         weights: Mapping[str, Array],
         *,
         mx: MLX,
-        arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
+        arithmetic_profile: ArithmeticProfile = "source-fp32",
     ) -> None:
         """Bind the topology and weights and select their arithmetic operators."""
         self.spec = spec
@@ -51,7 +51,7 @@ class SegResNet:
         self.arithmetic_profile = arithmetic_profile
         # Both convolution and normalization accumulation order affect sparse
         # released-checkpoint logits; correcting only one leaves amplified drift.
-        if arithmetic_profile == "torch-order-fp32":
+        if arithmetic_profile == "source-fp32":
             self._operators = Float32Operators(mx, spec.num_groups, spec.norm_eps)
         elif arithmetic_profile == "compensated-fp32":
             from medmlx_core.compensated import CompensatedFloat32Operators as AccuracyOperators
@@ -115,7 +115,7 @@ class SegResNet:
             hidden = self.conv(hidden, f"up_samples.{stage}.0.conv", padding=0)
             if self.spec.upsample_mode == "deconv":
                 prefix = f"up_samples.{stage}.1.deconv"
-                if self.arithmetic_profile != "torch-order-fp32":
+                if self.arithmetic_profile != "source-fp32":
                     hidden = cast("CompensatedFloat32Operators", self._operators).conv_transpose3d(
                         hidden, self._weights[f"{prefix}.weight"], self._weights[f"{prefix}.bias"]
                     )

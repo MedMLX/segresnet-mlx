@@ -130,7 +130,7 @@ def run(
     output_dir: PathLike,
     weights_path: PathLike | None = None,
     overwrite: bool = False,
-    precision: ArithmeticProfile = "torch-order-fp32",
+    precision: ArithmeticProfile = "source-fp32",
     streaming: bool = False,
     scratch_dir: PathLike | None = None,
 ) -> RunResult:
@@ -163,7 +163,7 @@ def run(
             published in ``MedMLX/segresnet-renal-cect-mlx``; ``None`` downloads it
             into the shared MedMLX cache. Hub-cache symlinks keep their file name.
         overwrite: Replace an existing ``mask.nii.gz`` when true; defaults to false.
-        precision: ``torch-order-fp32`` (default), ``compensated-fp32`` or
+        precision: ``source-fp32`` (default), ``compensated-fp32`` or
             ``compensated-fp48``.
         streaming: Use bounded blending intermediates and temporary mapped logits.
             The final label volume remains resident; defaults to False.
@@ -282,7 +282,7 @@ def _check_arguments(
 
     Returns the input files by channel, in network order, and the mask path.
     """
-    if precision not in {"torch-order-fp32", "compensated-fp32", "compensated-fp48"}:
+    if precision not in {"source-fp32", "compensated-fp32", "compensated-fp48"}:
         raise InvalidInputError(f"Unknown SegResNet precision {precision!r}")
     sources = input_channels(image_paths, config.channels)
     if not isinstance(cast(object, streaming), bool):
@@ -455,7 +455,7 @@ def _load_network(
     weights: Path,
     spec: SegResNetSpec,
     *,
-    arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
+    arithmetic_profile: ArithmeticProfile = "source-fp32",
 ) -> SegResNet:
     """Strictly load converted weights for the bundle topology."""
     from segresnet_mlx.weights import load_network

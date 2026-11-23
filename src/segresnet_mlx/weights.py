@@ -68,7 +68,7 @@ def load_network(
     weights_path: Path,
     *,
     spec: SegResNetSpec,
-    arithmetic_profile: ArithmeticProfile = "torch-order-fp32",
+    arithmetic_profile: ArithmeticProfile = "source-fp32",
 ) -> SegResNet:
     """Load converted float32 safetensors into a ``SegResNet`` for ``spec``.
 

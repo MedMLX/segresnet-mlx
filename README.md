@@ -63,7 +63,7 @@ weights, pass `weights_path` as a folder containing `segresnet-renal-cect.safete
 | `output_dir` | Directory for `mask.nii.gz`; created if missing |
 | `weights_path` | Optional folder containing `segresnet-renal-cect.safetensors` |
 | `overwrite` | `False` by default; an existing mask is replaced only when `True` |
-| `precision` | `torch-order-fp32` (default), `compensated-fp32` or `compensated-fp48` |
+| `precision` | `source-fp32` (default), `compensated-fp32` or `compensated-fp48` |
 | `streaming` | `False` by default; `True` keeps blending intermediates and logits in temporary mapped files |
 | `scratch_dir` | Parent directory for the streaming files; defaults to the system temporary directory |
 
@@ -79,7 +79,7 @@ The mask is float32 with labels 1 artery, 2 vein, 3 ureter, 4 neoplasm and
 
 | `precision` | Arithmetic |
 | :--- | :--- |
-| `torch-order-fp32` (default) | The default float32 profile |
+| `source-fp32` (default) | The default float32 profile |
 | `compensated-fp32` | Convolution and GroupNorm accumulate in paired Metal floats, with float32 layer outputs |
 | `compensated-fp48` | The pairs carry through the hidden layers and stitching runs in float64 on the host |
 
