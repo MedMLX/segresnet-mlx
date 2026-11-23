@@ -329,7 +329,7 @@ def predict_wide_logits(
 
     Preprocessed values and checkpoint parameters remain the same FP32 inputs.
     The original MONAI float64 network/inferer is the independent oracle for this
-    explicit profile. The learned graph runs on Metal; host work is stitching.
+    explicit precision. The learned graph runs on Metal; host work is stitching.
     """
     from medmlx_core.sliding_window import sliding_window_inference
 

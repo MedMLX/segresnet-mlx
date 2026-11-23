@@ -28,7 +28,7 @@ from medmlx_core.outputs import artifact
 from medmlx_core.weights import model_folder, weights_revision
 
 from segresnet_mlx import transforms
-from segresnet_mlx.topology import ArithmeticProfile, SegResNetSpec
+from segresnet_mlx.topology import Precision, SegResNetSpec
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +130,7 @@ def run(
     output_dir: PathLike,
     weights_path: PathLike | None = None,
     overwrite: bool = False,
-    precision: ArithmeticProfile = "source-fp32",
+    precision: Precision = "source-fp32",
     streaming: bool = False,
     scratch_dir: PathLike | None = None,
 ) -> RunResult:
@@ -201,7 +201,7 @@ def run(
     weights = _weights_file(model_folder(MODEL_ID, weights_path) / WEIGHTS_NAME)
     started = time.perf_counter()
     volumes = load_inputs(list(sources.items()))
-    network = _load_network(weights, config.spec, arithmetic_profile=precision)
+    network = _load_network(weights, config.spec, precision=precision)
     loaded = time.perf_counter()
     image, inverse = preprocess_renal(volumes)
     prepared = time.perf_counter()
@@ -274,7 +274,7 @@ def _check_arguments(
     output_dir: PathLike,
     *,
     overwrite: bool,
-    precision: ArithmeticProfile,
+    precision: Precision,
     streaming: bool,
     scratch_dir: PathLike | None,
 ) -> tuple[dict[str, Path], Path]:
@@ -455,13 +455,13 @@ def _load_network(
     weights: Path,
     spec: SegResNetSpec,
     *,
-    arithmetic_profile: ArithmeticProfile = "source-fp32",
+    precision: Precision = "source-fp32",
 ) -> SegResNet:
     """Strictly load converted weights for the bundle topology."""
     from segresnet_mlx.weights import load_network
 
     try:
-        return load_network(weights, spec=spec, arithmetic_profile=arithmetic_profile)
+        return load_network(weights, spec=spec, precision=precision)
     except (InvalidInputError, ValueError, RuntimeError) as error:
         raise AssetNotReadyError(
             f"SegResNet weights {weights} do not match {spec}: {error}",
@@ -494,7 +494,7 @@ def predict(
         host = np.ascontiguousarray(image, dtype=np.float32)
         logits = (
             predict_wide_logits(network, host, window, mx=mx, workspace=workspace)
-            if network.arithmetic_profile == "compensated-fp48"
+            if network.precision == "compensated-fp48"
             else BundlePredictor(network, mx=mx).predict_logits(host, window, workspace=workspace)
         )
     except (RuntimeError, ValueError) as error:

@@ -37,7 +37,7 @@ CHANNELS = ("arterial", "venous", "excretory")
     "problem",
     [
         "absent-path",
-        "unknown-profile",
+        "unknown-precision",
         "non-bool",
         "existing-output",
         "non-bool-streaming",
@@ -63,7 +63,7 @@ def test_registered_runners_reject_arguments_before_downloading(
     arguments: dict[str, object] = {"output_dir": str(output), "image_paths": image_paths}
     if problem == "absent-path":
         image_paths[CHANNELS[0]] = str(tmp_path / "absent.nii.gz")
-    elif problem == "unknown-profile":
+    elif problem == "unknown-precision":
         arguments["precision"] = "fp16"
     elif problem == "non-bool":
         arguments["overwrite"] = "false"

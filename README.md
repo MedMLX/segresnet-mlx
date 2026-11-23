@@ -79,7 +79,7 @@ The mask is float32 with labels 1 artery, 2 vein, 3 ureter, 4 neoplasm and
 
 | `precision` | Arithmetic |
 | :--- | :--- |
-| `source-fp32` (default) | The default float32 profile |
+| `source-fp32` (default) | The default float32 precision |
 | `compensated-fp32` | Convolution and GroupNorm accumulate in paired Metal floats, with float32 layer outputs |
 | `compensated-fp48` | The pairs carry through the hidden layers and stitching runs in float64 on the host |
 

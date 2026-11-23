@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from segresnet_mlx._types import Array
 
 from segresnet_mlx.network import SegResNet
-from segresnet_mlx.topology import ArithmeticProfile, SegResNetSpec
+from segresnet_mlx.topology import Precision, SegResNetSpec
 
 
 def required_shapes(spec: SegResNetSpec) -> dict[str, tuple[int, ...]]:
@@ -68,7 +68,7 @@ def load_network(
     weights_path: Path,
     *,
     spec: SegResNetSpec,
-    arithmetic_profile: ArithmeticProfile = "source-fp32",
+    precision: Precision = "source-fp32",
 ) -> SegResNet:
     """Load converted float32 safetensors into a ``SegResNet`` for ``spec``.
 
@@ -110,7 +110,7 @@ def load_network(
     for key, valid in finite.items():
         if not bool(valid.item()):
             raise InvalidInputError(f"SegResNet MLX parameter {key!r} must be finite float32")
-    return SegResNet(spec, weights, mx=mx, arithmetic_profile=arithmetic_profile)
+    return SegResNet(spec, weights, mx=mx, precision=precision)
 
 
 def _residual_shapes(prefix: str, channels: int) -> dict[str, tuple[int, ...]]:
