@@ -46,8 +46,9 @@ from medmlx_core.geometry import (
 from medmlx_core.geometry import (
     zoom_affine as zoom_affine,
 )
+from medmlx_core.typing import HostArray
 
-from segresnet_mlx._arrays import HostArray, Int64Array
+from segresnet_mlx._arrays import Int64Array
 from segresnet_mlx._nifti import NiftiImage, nib
 
 type Float32Array = npt.NDArray[np.float32]

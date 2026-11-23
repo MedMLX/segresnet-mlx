@@ -19,7 +19,6 @@ if TYPE_CHECKING:
         MLX,
         AccumulationOptions,
         Array,
-        CoreSlidingWindow,
         WorkspaceOptions,
     )
     from segresnet_mlx.network import SegResNet
@@ -27,9 +26,9 @@ if TYPE_CHECKING:
 import numpy as np
 from medmlx_core.errors import InvalidInputError
 from medmlx_core.layout import require_ncdhw
-from medmlx_core.typing import ArrayFactory
+from medmlx_core.typing import ArrayFactory, HostArray
 
-from segresnet_mlx._arrays import Float32Array, HostArray
+from segresnet_mlx._arrays import Float32Array
 from segresnet_mlx.medmlx import BUNDLES
 from segresnet_mlx.telemetry import SCHEMA_VERSION, WindowTelemetry
 
@@ -227,11 +226,7 @@ class BundlePredictor:
             InvalidInputError: If ``values`` is not finite float32.
             ValueError: If ``values`` is not rank 5.
         """
-        import medmlx_core.sliding_window as core_sliding_window
-
-        sliding_window_inference = cast(
-            "CoreSlidingWindow", core_sliding_window
-        ).sliding_window_inference
+        from medmlx_core.sliding_window import sliding_window_inference
 
         try:
             if accumulation not in {"numpy", "mlx"}:

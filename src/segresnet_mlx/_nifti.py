@@ -8,9 +8,10 @@ from typing import Protocol, cast
 
 import nibabel
 import numpy as np
+from medmlx_core.typing import HostArray
 from nibabel.filebasedimages import ImageFileError as ImageFileError
 
-from segresnet_mlx._arrays import Float64Array, HostArray
+from segresnet_mlx._arrays import Float64Array
 
 type PathArg = str | PathLike[str]
 

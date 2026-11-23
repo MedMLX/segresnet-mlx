@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import NotRequired, Protocol, TypedDict, cast
 
 import torch
+from medmlx_core.typing import HostArray
 
-from segresnet_mlx._arrays import HostArray, NumericArray
+from segresnet_mlx._arrays import NumericArray
 from segresnet_mlx._records import InfererConfig
 from segresnet_mlx.topology import SegResNetSpec
 

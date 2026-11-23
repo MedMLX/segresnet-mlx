@@ -19,9 +19,8 @@ from fixture_contracts import (
     SavedFacts,
     SpecRecord,
 )
-from medmlx_core.typing import ArrayFactory
+from medmlx_core.typing import ArrayFactory, HostArray
 
-from segresnet_mlx._arrays import HostArray
 from segresnet_mlx.topology import SegResNetSpec
 
 if TYPE_CHECKING:
