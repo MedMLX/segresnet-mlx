@@ -3,15 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
 
-from medmlx_core.errors import InvalidInputError
+from medmlx_core.weights import load_tensors
 
 from segresnet_mlx._runtime import import_mlx
-
-if TYPE_CHECKING:
-    from segresnet_mlx._types import Array
-
+from segresnet_mlx.medmlx import MODEL_ID
 from segresnet_mlx.network import SegResNet
 from segresnet_mlx.topology import Precision, SegResNetSpec
 
@@ -73,44 +69,17 @@ def load_network(
     """Load converted float32 safetensors into a ``SegResNet`` for ``spec``.
 
     Raises:
-        InvalidInputError: If ``weights_path`` does not end in ``.safetensors``, the
-            loaded value is not a mapping, its keys or shapes differ from
-            ``required_shapes(spec)``, or a parameter is not finite float32.
-        RuntimeError: If MLX cannot open or decode the weights file.
+        AssetNotReadyError: If the file cannot be read as safetensors, or its
+            tensor names, shapes or dtypes differ from ``required_shapes(spec)``,
+            or a parameter is not finite float32.
     """
-    if Path(weights_path).suffix != ".safetensors":
-        raise InvalidInputError("SegResNet weights must be a safetensors file")
-    mx = import_mlx()
-    raw: object = mx.load(str(weights_path))
-    if not isinstance(raw, dict):
-        raise InvalidInputError(f"SegResNet MLX weights are not a mapping: {weights_path}")
-    loaded = cast("dict[object, Array]", raw)
-    weights: dict[str, Array] = {str(key): value for key, value in loaded.items()}
-    required = required_shapes(spec)
-    expected = set(required)
-    actual = set(weights)
-    if actual != expected:
-        missing = sorted(expected - actual)
-        extra = sorted(actual - expected)
-        raise InvalidInputError(
-            f"SegResNet MLX weight keys differ; missing={missing}, extra={extra}"
-        )
-    for key, expected_shape in required.items():
-        shape = tuple(int(dim) for dim in weights[key].shape)
-        if shape != expected_shape:
-            raise InvalidInputError(
-                f"SegResNet MLX parameter {key!r} has shape {shape}; expected {expected_shape}"
-            )
-    for key, value in weights.items():
-        if value.dtype != mx.float32:
-            raise InvalidInputError(f"SegResNet MLX parameter {key!r} must be finite float32")
-    finite = {key: mx.all(mx.isfinite(value)) for key, value in weights.items()}
-    # Evaluate every admitted tensor and its check together before reading scalars.
-    mx.eval(weights, finite)
-    for key, valid in finite.items():
-        if not bool(valid.item()):
-            raise InvalidInputError(f"SegResNet MLX parameter {key!r} must be finite float32")
-    return SegResNet(spec, weights, mx=mx, precision=precision)
+    weights = load_tensors(
+        weights_path,
+        model_id=MODEL_ID,
+        label="SegResNet",
+        shapes=required_shapes(spec),
+    )
+    return SegResNet(spec, weights, mx=import_mlx(), precision=precision)
 
 
 def _residual_shapes(prefix: str, channels: int) -> dict[str, tuple[int, ...]]:

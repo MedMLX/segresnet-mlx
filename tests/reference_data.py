@@ -19,12 +19,14 @@ from fixture_contracts import (
     SavedFacts,
     SpecRecord,
 )
-from medmlx_core.typing import ArrayFactory, HostArray
+from medmlx_core.typing import HostArray
 
 from segresnet_mlx.topology import SegResNetSpec
 
 if TYPE_CHECKING:
-    from segresnet_mlx._types import MLX, Array
+    from medmlx_core.typing import MlxRuntime
+
+    from segresnet_mlx._types import Array
 
 ROOT = Path(__file__).resolve().parents[1]
 PINS = cast(Pins, json.loads((ROOT / "tests/fixtures/upstream_reference.json").read_text()))
@@ -106,11 +108,11 @@ def network_fixture(name: str) -> ModelFixture:
 
 
 def mlx_weights(
-    arrays: Mapping[str, HostArray], mx: MLX, prefix: str = "weight::"
+    arrays: Mapping[str, HostArray], mx: MlxRuntime, prefix: str = "weight::"
 ) -> dict[str, Array]:
     """Transfer the recorded weights under ``prefix`` to MLX with their original names."""
     return {
-        key.removeprefix(prefix): cast(ArrayFactory, mx.array)(value)
+        key.removeprefix(prefix): mx.array(value)
         for key, value in arrays.items()
         if key.startswith(prefix)
     }

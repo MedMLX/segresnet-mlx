@@ -8,12 +8,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import pytest
 from fixture_contracts import from_numpy
-from medmlx_core.typing import ArrayFactory
 from real_ct import renal_input
 
 from segresnet_mlx._arrays import as_numpy
@@ -98,7 +96,7 @@ def test_renal_segresnet_checkpoint_matches_monai_raw_logits(
         expected = source(source_input).float().numpy()
 
     candidate = load_network(Path(weights_file), spec=spec, precision=precision)
-    actual = candidate(cast(ArrayFactory, mx.array)(values))
+    actual = candidate(mx.array(values))
     mx.eval(actual)
     host = as_numpy(actual)
 

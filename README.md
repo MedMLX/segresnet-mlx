@@ -67,8 +67,9 @@ weights, pass `weights_path` as a folder containing `segresnet-renal-cect.safete
 | `streaming` | `False` by default; `True` keeps blending intermediates and logits in temporary mapped files |
 | `scratch_dir` | Parent directory for the streaming files; defaults to the system temporary directory |
 
-Inputs are finite 3D volumes on one voxel grid, with spatial units in millimetres or
-unspecified. The mask is written on the input grid as the NIfTI reader corrects it.
+Inputs are finite 3D volumes on one voxel grid. Meter and micron headers are converted
+to millimeters, and an unspecified unit is taken as millimeters. The mask is written on
+the input grid as the NIfTI reader corrects it.
 
 The model was trained on CT cropped to the kidney region. Crop around each kidney,
 with a margin of about 15 mm, before running it: on a wider field of view it can label
@@ -110,9 +111,8 @@ volume_logits = predict_logits(patch, config, network=network)  # stitched slidi
 - `predict_logits` takes preprocessed arrays of any size and stitches the bundle's
   sliding windows. Neither normalizes intensities, applies activations or maps labels.
 - `load_network` checks tensor names, shapes and finite float32 values against
-  `required_shapes(spec)`.
+  `required_shapes(spec)` and raises `AssetNotReadyError` on a mismatch.
 - `WindowTelemetry` and `BundlePredictor` record bounded progress and timing.
-- Inference requires Apple Silicon with Metal.
 
 ## Use with MedMLX
 

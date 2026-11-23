@@ -23,10 +23,10 @@ import numpy as np
 import pytest
 from medmlx_core.errors import InvalidInputError
 from medmlx_core.outputs import validate_outputs
+from medmlx_core.volumes import read_volume
 from reference_data import bundle_fixture, mlx_weights, segresnet_spec, write_inputs
 
 from segresnet_mlx import medmlx
-from segresnet_mlx._nifti import nib
 from segresnet_mlx.medmlx import BUNDLES, OUTPUT_NAME, WEIGHTS_NAME, run
 
 RENAL = "renalStructures_CECT_segmentation"
@@ -104,7 +104,7 @@ def test_registered_streaming_runner_preserves_upstream_labels_and_cleans_worksp
         scratch_dir=str(scratch),
     )
     np.testing.assert_array_equal(
-        np.asanyarray(nib.load(result["outputs"]["mask"]).dataobj),
+        read_volume(result["outputs"]["mask"]).data,
         arrays["axis::runner_mask"],
     )
     assert result["details"].get("streaming") is True
@@ -155,6 +155,6 @@ def test_runner_matches_the_original_upstream_pipeline(
         weights_path=str(weights),
         output_dir=str(tmp_path / "out"),
     )
-    written = nib.load(result["outputs"]["mask"])
+    written = read_volume(result["outputs"]["mask"])
     # The label map must agree exactly, including class priority and threshold ties.
-    assert np.array_equal(np.asanyarray(written.dataobj), arrays[f"{case}::{suffix}_mask"])
+    assert np.array_equal(written.data, arrays[f"{case}::{suffix}_mask"])

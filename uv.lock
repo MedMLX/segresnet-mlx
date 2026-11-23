@@ -189,7 +189,7 @@ wheels = [
 
 [[package]]
 name = "medmlx-core"
-version = "0.3.1"
+version = "0.3.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -197,9 +197,14 @@ dependencies = [
     { name = "mlx" },
     { name = "numpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6c/db/546cc6d3511cca9248aa0146daabb5bc4af8093f2a9eb4d3a7589857d737/medmlx_core-0.3.1.tar.gz", hash = "sha256:ddfb852659a6d20669d6eefd92331b1ea770f958ba24c52863c75b182fe10944", size = 75488, upload-time = "2026-11-15T01:59:01.301Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/dd/b9aedeab4680324066d7a73f169182bdec0aab420b7f111808dbc4d4493d/medmlx_core-0.3.2.tar.gz", hash = "sha256:df809918a843eed915f4a505f1f779aa94e892f09439cff9d06ab49baee8a0b8", size = 104586, upload-time = "2026-11-23T11:34:04.636Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a5/30/3248054523a8b7c963f5edbb8ddd4d487a61731cb3a794eafdbad48fbc3a/medmlx_core-0.3.1-py3-none-any.whl", hash = "sha256:d3a4fec93b5eb3d6238bf36f91f23f1fc97149ecfe8461a15e8e5f154d3c78e1", size = 93045, upload-time = "2026-11-15T01:58:59.968Z" },
+    { url = "https://files.pythonhosted.org/packages/60/8a/3a29849517e4077f5ceb477b414abb8c50a7f97463c6f65ec35daa000601/medmlx_core-0.3.2-py3-none-any.whl", hash = "sha256:dbc9b47baf25a3cbbffa06fd2efe114f1c7815a9e72fa95ae3f3ec0ac20ad976", size = 124029, upload-time = "2026-11-23T11:34:03.783Z" },
+]
+
+[package.optional-dependencies]
+nifti = [
+    { name = "nibabel" },
 ]
 
 [[package]]
@@ -382,9 +387,8 @@ name = "segresnet-mlx"
 version = "0.5.0"
 source = { editable = "." }
 dependencies = [
-    { name = "medmlx-core" },
+    { name = "medmlx-core", extra = ["nifti"] },
     { name = "mlx" },
-    { name = "nibabel" },
     { name = "numpy" },
 ]
 
@@ -402,10 +406,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6,<7" },
-    { name = "medmlx-core", specifier = ">=0.3.1,<0.4" },
+    { name = "medmlx-core", extras = ["nifti"], specifier = ">=0.3.2,<0.4" },
     { name = "mlx", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'", specifier = "==0.32.4" },
     { name = "monai", marker = "extra == 'dev'", specifier = "==1.6.1" },
-    { name = "nibabel", specifier = ">=5.3,<6" },
     { name = "numpy", specifier = ">=2.0,<3" },
     { name = "pyright", marker = "extra == 'dev'", specifier = "==1.1.414" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4,<10" },

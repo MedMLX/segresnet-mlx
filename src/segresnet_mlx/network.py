@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from medmlx_core.compensated import CompensatedFloat32Operators, CompensatedFloat48Operators
+    from medmlx_core.typing import MlxRuntime
 
-    from segresnet_mlx._types import MLX, Array
+    from segresnet_mlx._types import Array
 
 from medmlx_core.layout import require_ncdhw
 from medmlx_core.ops import conv_transpose3d_ncdhw, upsample_trilinear_ncdhw
@@ -41,7 +42,7 @@ class SegResNet:
         spec: SegResNetSpec,
         weights: Mapping[str, Array],
         *,
-        mx: MLX,
+        mx: MlxRuntime,
         precision: Precision = "source-fp32",
     ) -> None:
         """Bind the topology and weights and select their arithmetic operators."""

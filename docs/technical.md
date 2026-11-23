@@ -6,7 +6,7 @@
 and an ROI-depth FP32 score/count slab on Metal and exports completed planes
 only. The default `accumulation="numpy"` blends on the host as before. The MLX
 route needs `sliding_window_inference(accumulation="mlx")` from `medmlx-core`
-0.3.1 or later; the default route works with 0.3.0.
+0.3.1 or later; the package requires 0.3.2.
 
 Comparison on real CT (HCC-TACE-Seg HCC_063 contrast CT, two 3-channel 96^3 crops
 with liver voxels retained, the recorded decoder-network fixture weights,
