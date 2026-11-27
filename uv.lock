@@ -387,7 +387,7 @@ wheels = [
 
 [[package]]
 name = "segresnet-mlx"
-version = "0.6.0"
+version = "0.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "medmlx-core", extra = ["nifti"] },
